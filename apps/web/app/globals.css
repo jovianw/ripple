@@ -1,66 +1,60 @@
 @import "tailwindcss";
 
-/* Ripple is a dark engineering dashboard: one theme, tuned for a projector. */
+/*
+ * Ripple's surface is the 3D world; the chrome is instrumentation laid over it.
+ * Panels therefore sit within a few percent of the world's own darkness — the
+ * separation comes from spacing and type weight, not from boxes.
+ */
 
 :root {
   color-scheme: dark;
 
-  --bg: #0a0c0e;
-  --panel: #101316;
-  --panel-raised: #151a1e;
-  --line: rgba(255, 255, 255, 0.09);
-  --line-strong: rgba(255, 255, 255, 0.16);
+  --void: #07090b;        /* world background, matches the skybox base */
+  --raised: #0a0d10;      /* barely-there lift for instrumentation areas */
+  --hair: rgba(255, 255, 255, 0.07);
 
-  --ink: rgba(255, 255, 255, 0.92);
-  --ink-dim: rgba(255, 255, 255, 0.58);
-  --ink-faint: rgba(255, 255, 255, 0.34);
+  --ink: #e9ebed;         /* neutral white, slightly warm */
+  --dim: #98a1ab;
+  --faint: #5b636c;
+  --ghost: #3a4148;
 
-  --accent: #4ea8ff;
-  --good: #2fd27a;
-  --warn: #ffb020;
-  --bad: #ff4d4d;
+  --accent: #4ec9e0;      /* Ripple: active, current, identity */
+  --good: #43d17a;        /* pass only */
+  --bad: #ff5f5f;         /* hard failure only */
+  --warn: #f0a742;        /* repair / warning only */
   --copper: #c2803a;
 }
 
 @theme inline {
-  --color-bg: var(--bg);
-  --color-panel: var(--panel);
-  --color-raised: var(--panel-raised);
-  --color-line: var(--line);
-  --color-line-strong: var(--line-strong);
+  --color-void: var(--void);
+  --color-raised: var(--raised);
+  --color-hair: var(--hair);
   --color-ink: var(--ink);
-  --color-dim: var(--ink-dim);
-  --color-faint: var(--ink-faint);
+  --color-dim: var(--dim);
+  --color-faint: var(--faint);
+  --color-ghost: var(--ghost);
   --color-accent: var(--accent);
   --color-good: var(--good);
-  --color-warn: var(--warn);
   --color-bad: var(--bad);
+  --color-warn: var(--warn);
   --color-copper: var(--copper);
 
-  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --font-sans: var(--font-sans), system-ui, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, monospace;
 }
 
 body {
-  background: var(--bg);
+  background: var(--void);
   color: var(--ink);
   font-family: var(--font-sans);
   overscroll-behavior: none;
 }
 
-/* Technical grid, kept faint enough to read as texture rather than decoration. */
-.tech-grid {
-  background-image:
-    linear-gradient(var(--line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--line) 1px, transparent 1px);
-  background-size: 32px 32px;
-  background-position: -1px -1px;
-}
-
-@keyframes rise {
+/* Trace entries arrive from below, the way a log grows. */
+@keyframes trace-in {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(3px);
   }
   to {
     opacity: 1;
@@ -68,28 +62,27 @@ body {
   }
 }
 
-.rise {
-  animation: rise 200ms ease-out both;
+.trace-in {
+  animation: trace-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-@keyframes pulse-dot {
+@keyframes breathe {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
+  50% { opacity: 0.4; }
 }
 
-.pulse-dot {
-  animation: pulse-dot 1.4s ease-in-out infinite;
+.breathe {
+  animation: breathe 1.6s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rise,
-  .pulse-dot {
+  .trace-in,
+  .breathe {
     animation: none;
   }
 }
 
-/* Thin scrollbars so the activity panel doesn't shout. */
 .slim-scroll {
   scrollbar-width: thin;
-  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-color: var(--ghost) transparent;
 }

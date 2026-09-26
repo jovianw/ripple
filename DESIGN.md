@@ -261,7 +261,9 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 - [x] Parts whitelist (`parts/whitelist.json` v2, `npm run verify:parts`)
 - [x] Finale board spec (`specs/finale.json`), checks, and 20-part reference board in three groups (`npm run smoke finale`)
 - [x] Board deliverables export (§5b; `npm run export <board>`, `npm run test:export`)
-- [ ] **2:30–3:30** Finale first full run through the work queue
+- [x] Finale queue handler (`apps/worker/src/pipeline/planned-board.ts`): planner items → coder per subcircuit → route + DRC + `checkInterface` → assembler + hidden checks → deliverables, on `enqueue`/`runQueue`
+- [x] Dry run with stand-in planner + coder (`npm run finale -- --stub`): killed with `kill -9` mid-step, resumed, every step ran once, final board passed the finale's hidden checks
+- [ ] **2:30–3:30** Finale first full run through the work queue with the real coder (`npm run finale`); needs Arjun's `complete` adapter for the planner
 - [ ] Present the live demo
 
 ### Jovian: harness core and memory
@@ -270,7 +272,7 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 - [x] **11:00–12:00** Config versioning: `harness_versions`, current config, propose (`apps/worker/src/harness/config.ts`: `currentConfig`, `getConfig`, `history`, `propose`; v0 seeded with `npm run seed:config`)
 - [x] **12:00–1:00** Memory: Voyage embeddings, vector indexes, retrieval and rerank (`apps/worker/src/harness/memory.ts`: `addLesson`/`retrieveLessons`, `addSubcircuit`/`retrieveSubcircuits`, `indexFailure`/`similarFailures`; k and rerank come from `config.context`)
 - [x] **1:00–2:00** Work queue, transactions, idempotent runs, heartbeat, resume (`apps/worker/src/harness/queue.ts`: `enqueue`, `runQueue(boardId, handler)`, `complete`/`fail` in transactions; kill-and-resume verified with `npm run queue:demo`)
-- [ ] **2:00–3:00** Config gate (keep, roll back, reject); change-stream triggers for critic and meta-agent
+- [ ] **2:00–3:00** Config gate (keep, roll back, reject); change-stream triggers for critic and meta-agent (gate done: `apps/worker/src/harness/gate.ts`, `scoreVersion` + `evaluatePending(runBatch)` + guardrails, tested on throwaway collections; change streams next, meta-agent trigger only)
 - [ ] **3:00–3:30** Help run the finale board through the queue with kill-and-resume
 
 ### Arjun: agents, tools, models

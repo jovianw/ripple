@@ -23,7 +23,8 @@
     "try:planner": "tsx --env-file-if-exists=.env scripts/try-planner.ts",
     "ablation": "tsx --env-file-if-exists=.env scripts/ablation.ts",
     "export": "tsx scripts/export-board.tsx",
-    "test:export": "tsx --test apps/worker/src/export/deliverables.test.tsx"
+    "test:export": "tsx --test apps/worker/src/export/deliverables.test.tsx",
+    "finale": "tsx --env-file-if-exists=.env scripts/finale-run.tsx"
   },
   "devDependencies": {
     "@resvg/resvg-js": "2.6.2",

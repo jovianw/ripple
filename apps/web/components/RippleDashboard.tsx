@@ -2,12 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { AgentActivity } from "@/components/activity/AgentActivity";
-import { BuildTimeline } from "@/components/build/BuildTimeline";
-import { PromptBar } from "@/components/build/PromptBar";
-import { StageProgress } from "@/components/build/StageProgress";
+import { ExecutionTrace } from "@/components/activity/ExecutionTrace";
+import { DeliverablesPanel } from "@/components/deliverables/DeliverablesPanel";
+import { HistoryGraph } from "@/components/build/HistoryGraph";
+import { SpecificationBar } from "@/components/build/SpecificationBar";
+import { StageRibbon } from "@/components/build/StageRibbon";
+import { Telemetry } from "@/components/build/Telemetry";
+import { ComponentInspector } from "@/components/pcb/ComponentInspector";
 import { PCBViewport } from "@/components/pcb/PCBViewport";
+import type { RippleEvent } from "@/components/pcb/RippleField";
+import { WorldHud } from "@/components/pcb/WorldHud";
 import { DEFAULT_PROMPT, DEMO_SNAPSHOTS } from "@/lib/demoSnapshots";
+import { deriveMetrics } from "@/lib/metrics";
 import { diffPCBStates } from "@/lib/pcbDiff";
 import { EMPTY_PCB, type PCBComponent } from "@/lib/types";
 
@@ -16,35 +22,30 @@ import { EMPTY_PCB, type PCBComponent } from "@/lib/types";
 // knows the difference — it all takes BuildSnapshot props.
 const SNAPSHOTS = DEMO_SNAPSHOTS;
 
-function StatusChip({
-  idle,
-  running,
-  failing,
-  complete,
-}: {
-  idle: boolean;
+// Which board's deliverables the finished run corresponds to. Becomes the real
+// board id once runs are persisted; the panel takes it as a prop either way.
+const DELIVERABLES_BOARD_ID = "t04";
+
+/** One canonical status for the whole system; details live elsewhere. */
+function systemStatus(args: {
+  started: boolean;
   running: boolean;
   failing: boolean;
+  repairing: boolean;
   complete: boolean;
-}) {
-  const [dot, label, ink] = failing
-    ? ["bg-bad", "Check failed", "text-bad"]
-    : complete
-      ? ["bg-good", "Checks passed", "text-good"]
-      : running
-        ? ["bg-accent pulse-dot", "Building", "text-accent"]
-        : idle
-          ? ["bg-white/30", "Idle", "text-dim"]
-          : ["bg-white/30", "Ready", "text-dim"];
-
-  return (
-    <span className="flex items-center gap-2">
-      <span className={`h-2 w-2 rounded-full ${dot}`} aria-hidden />
-      <span className={`font-mono text-[11px] uppercase tracking-wider ${ink}`}>
-        {label}
-      </span>
-    </span>
-  );
+  checking: boolean;
+}): { label: string; ink: string; dot: string; pulse: boolean } {
+  if (args.failing)
+    return { label: "Failed", ink: "text-bad", dot: "bg-bad", pulse: false };
+  if (args.repairing)
+    return { label: "Repairing", ink: "text-warn", dot: "bg-warn", pulse: true };
+  if (args.complete)
+    return { label: "Passed", ink: "text-good", dot: "bg-good", pulse: false };
+  if (args.checking)
+    return { label: "Checking", ink: "text-accent", dot: "bg-accent", pulse: true };
+  if (args.running)
+    return { label: "Building", ink: "text-accent", dot: "bg-accent", pulse: true };
+  return { label: "Idle", ink: "text-faint", dot: "bg-ghost", pulse: false };
 }
 
 export function RippleDashboard() {
@@ -54,6 +55,7 @@ export function RippleDashboard() {
   const [isLive, setIsLive] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
   const [selected, setSelected] = useState<PCBComponent | null>(null);
+  const [showDeliverables, setShowDeliverables] = useState(false);
 
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   // Timers read liveness from a ref so scrubbing never has to cancel the run:
@@ -73,6 +75,7 @@ export function RippleDashboard() {
     setIsLive(true);
     setSelected(null);
     setIsRunning(true);
+    setShowDeliverables(false);
     setRevealed(1);
     setCurrentIndex(0);
 
@@ -98,6 +101,7 @@ export function RippleDashboard() {
     setRevealed(0);
     setCurrentIndex(-1);
     setSelected(null);
+    setShowDeliverables(false);
   }, [clearTimers]);
 
   const scrubTo = useCallback((index: number) => {
@@ -126,6 +130,46 @@ export function RippleDashboard() {
   const current = currentIndex >= 0 ? SNAPSHOTS[currentIndex] : null;
   const pcb = current?.pcb ?? EMPTY_PCB;
 
+  const diff = useMemo(() => {
+    const previous =
+      currentIndex > 0 ? SNAPSHOTS[currentIndex - 1].pcb : EMPTY_PCB;
+    return diffPCBStates(previous, pcb);
+  }, [currentIndex, pcb]);
+
+  // Added parts animate by mounting; *changed* parts keep the same mesh, so the
+  // diff is what tells the scene to re-highlight them.
+  const changedIds = useMemo(
+    () => new Set(diff.changedComponents.map((c) => c.id)),
+    [diff],
+  );
+
+  // Change propagation: one ring per meaningful edit, keyed by snapshot so the
+  // scene admits each exactly once.
+  const ripples = useMemo<RippleEvent[]>(() => {
+    if (!current) return [];
+    const version = current.version;
+    const out: RippleEvent[] = [];
+
+    for (const c of diff.addedComponents) {
+      out.push({
+        id: `${version}:add:${c.id}`,
+        x: c.position.x,
+        y: c.position.y,
+        tone: c.placedDuring === "repair" ? "repair" : "place",
+      });
+    }
+    for (const c of diff.changedComponents) {
+      if (c.status !== "error" && c.status !== "repairing") continue;
+      out.push({
+        id: `${version}:${c.status}:${c.id}`,
+        x: c.position.x,
+        y: c.position.y,
+        tone: c.status === "error" ? "error" : "repair",
+      });
+    }
+    return out;
+  }, [current, diff]);
+
   const history = useMemo(
     () => SNAPSHOTS.slice(0, isLive ? revealed : currentIndex + 1),
     [isLive, revealed, currentIndex],
@@ -136,71 +180,146 @@ export function RippleDashboard() {
     [revealed],
   );
 
-  // What changed since the previous snapshot. Added parts animate in by virtue
-  // of mounting; *changed* parts keep the same mesh, so the diff is what tells
-  // the scene to re-highlight them.
-  const changedIds = useMemo(() => {
-    const previous =
-      currentIndex > 0 ? SNAPSHOTS[currentIndex - 1].pcb : EMPTY_PCB;
-    const diff = diffPCBStates(previous, pcb);
-    return new Set(diff.changedComponents.map((c) => c.id));
-  }, [currentIndex, pcb]);
+  const metrics = useMemo(() => deriveMetrics(pcb, current), [pcb, current]);
 
-  // Keep the inspector in sync when a snapshot changes a part's status.
+  const faultId =
+    pcb.components.find(
+      (c) => c.status === "error" || c.status === "repairing",
+    )?.id ?? null;
+
   const selectedLive = selected
     ? (pcb.components.find((c) => c.id === selected.id) ?? null)
     : null;
 
   const complete = current?.stage === "complete";
   const failing = current?.status === "error";
+  const repairing = current?.stage === "repair" && !complete;
+  const checkFailed = history.some((s) => s.status === "error");
+  const progress = revealed === 0 ? 0 : (currentIndex + 1) / SNAPSHOTS.length;
+
+  const status = systemStatus({
+    started: revealed > 0,
+    running: isRunning,
+    failing,
+    repairing,
+    complete,
+    checking: current?.stage === "checking" && !failing,
+  });
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
-      <header className="flex shrink-0 items-center justify-between border-b border-line bg-panel px-4 py-3">
-        <div className="flex items-baseline gap-3">
-          <span className="text-[15px] font-semibold tracking-[0.2em]">
-            RIPPLE
+    <div className="flex h-screen flex-col overflow-hidden bg-void">
+      {/* Product status bar. Two facts on the left, two on the right. */}
+      <header className="flex h-12 shrink-0 items-center justify-between px-6">
+        <div className="flex items-baseline gap-2.5">
+          <span className="text-[15px] font-medium tracking-[0.08em] text-ink">
+            Ripple
           </span>
-          <span className="hidden font-mono text-[11px] text-faint sm:inline">
-            agentic PCB design
-          </span>
+          <span className="text-[12px] text-ghost">PCB synthesis</span>
         </div>
         <div className="flex items-center gap-5">
-          <span className="font-mono text-[11px] text-faint">Harness v1</span>
-          <StatusChip
-            idle={revealed === 0}
-            running={isRunning}
-            failing={failing}
-            complete={complete}
-          />
+          <span className="text-[12px] text-faint">
+            Harness <span className="font-mono text-dim">01</span>
+          </span>
+          <span className="flex items-center gap-2">
+            <span
+              className={`h-[6px] w-[6px] rounded-full ${status.dot} ${
+                status.pulse ? "breathe" : ""
+              }`}
+              aria-hidden
+            />
+            <span className={`text-[12px] ${status.ink}`}>{status.label}</span>
+          </span>
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-rows-[1fr_auto] lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-1">
-        <section className="flex min-h-0 flex-col">
-          <div className="tech-grid relative min-h-[280px] flex-1">
-            {/* Absolute fill: the canvas must not depend on flex measuring
-                the row before three has mounted. */}
-            <div className="absolute inset-0">
-              <PCBViewport
-                pcb={pcb}
-                isRunning={isRunning}
-                selectedId={selectedLive?.id ?? null}
-                changedIds={changedIds}
-                snapshotVersion={current?.version ?? -1}
-                onSelect={setSelected}
+      <div className="grid min-h-0 flex-1 grid-rows-[1fr_auto] lg:grid-cols-[minmax(0,1fr)_310px] lg:grid-rows-1">
+        {/* The world. Instrumentation floats over it rather than beside it. */}
+        <section className="relative min-h-[260px]">
+          <div className="absolute inset-0">
+            <PCBViewport
+              pcb={pcb}
+              isRunning={isRunning}
+              selectedId={selectedLive?.id ?? null}
+              changedIds={changedIds}
+              snapshotVersion={current?.version ?? -1}
+              focusId={faultId}
+              ripples={ripples}
+              complete={complete}
+              onSelect={setSelected}
+            />
+          </div>
+
+          {current ? (
+            <div className="pointer-events-none absolute left-6 top-5">
+              <WorldHud
+                snapshot={current}
+                progress={progress}
+                totalSteps={SNAPSHOTS.length}
               />
             </div>
-            {revealed === 0 ? (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <p className="rounded border border-line bg-panel/80 px-4 py-2 text-xs text-dim backdrop-blur-sm">
-                  Describe a board and press Build
-                </p>
+          ) : (
+            <div className="pointer-events-none absolute left-6 top-5 max-w-[20rem]">
+              <div className="text-[20px] font-medium leading-tight text-dim">
+                Idle
               </div>
+              <div className="mt-1.5 text-[12px] text-ghost">
+                Describe a board to begin synthesis.
+              </div>
+            </div>
+          )}
+
+          {!isLive ? (
+            <div className="pointer-events-none absolute right-6 top-5 text-right">
+              <div className="text-[12px] text-warn">Viewing history</div>
+              <div className="font-mono text-[11px] text-faint">
+                {currentIndex + 1} / {revealed}
+              </div>
+            </div>
+          ) : null}
+
+          {selectedLive ? (
+            <div className="absolute bottom-5 left-6">
+              <ComponentInspector
+                component={selectedLive}
+                onClose={() => setSelected(null)}
+              />
+            </div>
+          ) : null}
+
+          <div className="absolute bottom-5 right-6 flex items-baseline gap-5">
+            <div className="pointer-events-none">
+              <Telemetry metrics={metrics} />
+            </div>
+            {complete ? (
+              <button
+                type="button"
+                onClick={() => setShowDeliverables(true)}
+                className="trace-in text-[13px] text-accent hover:text-ink"
+              >
+                Deliverables →
+              </button>
             ) : null}
           </div>
-          <div className="shrink-0 border-t border-line bg-panel">
-            <PromptBar
+
+          {showDeliverables ? (
+            <DeliverablesPanel
+              boardId={DELIVERABLES_BOARD_ID}
+              onClose={() => setShowDeliverables(false)}
+            />
+          ) : null}
+        </section>
+
+        {/* Instrumentation column: a tonal shift and a hairline, no panel. */}
+        <aside className="flex min-h-0 flex-col border-l border-hair bg-raised">
+          <ExecutionTrace history={history} />
+        </aside>
+      </div>
+
+      {/* Footer: specification, run shape, state history. One band. */}
+      <footer className="shrink-0 border-t border-hair px-6 py-3">
+        <div className="flex items-center gap-8">
+          <div className="min-w-0 flex-1">
+            <SpecificationBar
               value={prompt}
               onChange={setPrompt}
               onBuild={runDemo}
@@ -209,28 +328,26 @@ export function RippleDashboard() {
               hasRun={revealed > 0}
             />
           </div>
-        </section>
 
-        <AgentActivity
-          history={history}
-          selected={selectedLive}
-          onClearSelection={() => setSelected(null)}
-        />
-      </div>
-
-      <div className="shrink-0 border-t border-line bg-panel">
-        <StageProgress stage={current?.stage ?? null} failed={failing} />
-      </div>
-
-      <div className="shrink-0 border-t border-line bg-panel">
-        <BuildTimeline
-          snapshots={revealedSnapshots}
-          currentIndex={currentIndex}
-          isLive={isLive}
-          onScrub={scrubTo}
-          onReturnToLive={returnToLive}
-        />
-      </div>
+          {revealed > 0 ? (
+            <>
+              <StageRibbon
+                stage={current?.stage ?? null}
+                failed={failing}
+                checkFailed={checkFailed}
+              />
+              <HistoryGraph
+                snapshots={revealedSnapshots}
+                currentIndex={currentIndex}
+                totalCount={revealed}
+                isLive={isLive}
+                onScrub={scrubTo}
+                onReturnToLive={returnToLive}
+              />
+            </>
+          ) : null}
+        </div>
+      </footer>
     </div>
   );
 }

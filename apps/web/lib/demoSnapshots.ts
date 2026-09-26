@@ -14,7 +14,7 @@ import type {
 export const DEFAULT_PROMPT =
   "Build a USB-C powered temperature sensor board with an ESP32.";
 
-const BOARD = { width: 12, height: 8 };
+const BOARD = { width: 12, height: 8, widthMm: 48, heightMm: 32 };
 
 // ---------------------------------------------------------------- components
 
@@ -27,6 +27,7 @@ const J1: PCBComponent = {
   position: { x: -4.9, y: 0 },
   size: { width: 1.5, height: 1.2, depth: 0.5 },
   placedDuring: "placement",
+  costUsd: 0.86,
 };
 
 const U1: PCBComponent = {
@@ -38,6 +39,7 @@ const U1: PCBComponent = {
   position: { x: 0.2, y: -0.3 },
   size: { width: 3.6, height: 2.4, depth: 0.42 },
   placedDuring: "placement",
+  costUsd: 2.1,
 };
 
 const U2: PCBComponent = {
@@ -49,6 +51,7 @@ const U2: PCBComponent = {
   position: { x: -3.0, y: 1.3 },
   size: { width: 1.0, height: 0.9, depth: 0.3 },
   placedDuring: "placement",
+  costUsd: 0.42,
 };
 
 const U3: PCBComponent = {
@@ -60,6 +63,7 @@ const U3: PCBComponent = {
   position: { x: 4.0, y: 1.3 },
   size: { width: 0.85, height: 0.85, depth: 0.24 },
   placedDuring: "placement",
+  costUsd: 0.64,
 };
 
 const C1: PCBComponent = {
@@ -68,8 +72,9 @@ const C1: PCBComponent = {
   label: "C1",
   part: "10uF input bulk",
   position: { x: -4.0, y: 2.2 },
-  size: { width: 0.42, height: 0.3, depth: 0.18 },
+  size: { width: 0.42, height: 0.3, depth: 0.12 },
   placedDuring: "placement",
+  costUsd: 0.06,
 };
 
 const C2: PCBComponent = {
@@ -78,8 +83,9 @@ const C2: PCBComponent = {
   label: "C2",
   part: "10uF output bulk",
   position: { x: -1.9, y: 2.2 },
-  size: { width: 0.42, height: 0.3, depth: 0.18 },
+  size: { width: 0.42, height: 0.3, depth: 0.12 },
   placedDuring: "placement",
+  costUsd: 0.06,
 };
 
 const C3: PCBComponent = {
@@ -88,8 +94,9 @@ const C3: PCBComponent = {
   label: "C3",
   part: "100nF MCU decoupling",
   position: { x: -1.5, y: -2.0 },
-  size: { width: 0.42, height: 0.3, depth: 0.18 },
+  size: { width: 0.42, height: 0.3, depth: 0.12 },
   placedDuring: "placement",
+  costUsd: 0.03,
 };
 
 const R1: PCBComponent = {
@@ -98,8 +105,9 @@ const R1: PCBComponent = {
   label: "R1",
   part: "4.7k SDA pull-up",
   position: { x: 2.9, y: 2.5 },
-  size: { width: 0.42, height: 0.24, depth: 0.16 },
+  size: { width: 0.42, height: 0.24, depth: 0.10 },
   placedDuring: "placement",
+  costUsd: 0.02,
 };
 
 const R2: PCBComponent = {
@@ -108,8 +116,9 @@ const R2: PCBComponent = {
   label: "R2",
   part: "4.7k SCL pull-up",
   position: { x: 3.7, y: 2.5 },
-  size: { width: 0.42, height: 0.24, depth: 0.16 },
+  size: { width: 0.42, height: 0.24, depth: 0.10 },
   placedDuring: "placement",
+  costUsd: 0.02,
 };
 
 /** The repair part — absent until the critic finds the fault. */
@@ -119,8 +128,9 @@ const C7: PCBComponent = {
   label: "C7",
   part: "100nF decoupling",
   position: { x: -3.0, y: 0.35 },
-  size: { width: 0.42, height: 0.3, depth: 0.18 },
+  size: { width: 0.42, height: 0.3, depth: 0.12 },
   placedDuring: "repair",
+  costUsd: 0.03,
 };
 
 // -------------------------------------------------------------------- traces
@@ -267,6 +277,8 @@ export const DEMO_SNAPSHOTS: BuildSnapshot[] = [
     message: "Parsing requirements",
     status: "working",
     tick: "Parse",
+    drcErrors: 0,
+    summary: ["PARSE", "Requirements read"],
     delay: 900,
     timestamp: nextTs(900),
     pcb: pcb([], []),
@@ -278,6 +290,8 @@ export const DEMO_SNAPSHOTS: BuildSnapshot[] = [
     message: "Identified power, MCU, and sensor blocks",
     status: "success",
     tick: "Plan",
+    drcErrors: 0,
+    summary: ["PLAN", "Power, MCU and sensor blocks"],
     delay: 1000,
     timestamp: nextTs(1000),
     pcb: pcb([], []),
@@ -289,6 +303,8 @@ export const DEMO_SNAPSHOTS: BuildSnapshot[] = [
     message: "Placing ESP32-S3",
     status: "working",
     tick: "MCU",
+    drcErrors: 0,
+    summary: ["PLACE", "+ U1 ESP32-S3"],
     delay: 1100,
     timestamp: nextTs(1100),
     pcb: pcb([U1], []),
@@ -300,6 +316,8 @@ export const DEMO_SNAPSHOTS: BuildSnapshot[] = [
     message: "Adding USB-C power stage",
     status: "working",
     tick: "Power",
+    drcErrors: 0,
+    summary: ["PLACE", "+ J1 USB-C, + U2 regulator"],
     delay: 1100,
     timestamp: nextTs(1100),
     pcb: pcb([U1, J1, U2], []),
@@ -311,6 +329,8 @@ export const DEMO_SNAPSHOTS: BuildSnapshot[] = [
     message: "Placing sensor and passives",
     status: "success",
     tick: "Place",
+    drcErrors: 0,
+    summary: ["PLACE", "+ U3, C1-C3, R1, R2"],
     delay: 1100,
     timestamp: nextTs(1100),
     pcb: pcb(PLACED_ALL, []),
@@ -322,6 +342,8 @@ export const DEMO_SNAPSHOTS: BuildSnapshot[] = [
     message: "Connecting power nets",
     status: "working",
     tick: "Power net",
+    drcErrors: 0,
+    summary: ["WIRE", "+ 3 power nets"],
     delay: 1200,
     timestamp: nextTs(1200),
     pcb: pcb(PLACED_ALL, WIRED),
@@ -333,6 +355,8 @@ export const DEMO_SNAPSHOTS: BuildSnapshot[] = [
     message: "Routing I2C bus and passives",
     status: "success",
     tick: "Route",
+    drcErrors: 0,
+    summary: ["ROUTE", "+ 7 signal nets"],
     delay: 1300,
     timestamp: nextTs(1300),
     pcb: pcb(PLACED_ALL, ROUTED),
@@ -344,6 +368,8 @@ export const DEMO_SNAPSHOTS: BuildSnapshot[] = [
     message: "Running design checks",
     status: "working",
     tick: "Check",
+    drcErrors: 0,
+    summary: ["CHECK", "Running design rules"],
     delay: 1100,
     timestamp: nextTs(1100),
     pcb: pcb(PLACED_ALL, ROUTED),
@@ -355,7 +381,9 @@ export const DEMO_SNAPSHOTS: BuildSnapshot[] = [
     message: "U2 VDD has no 100nF decoupling capacitor nearby",
     status: "error",
     tick: "Fail",
-    delay: 1700,
+    drcErrors: 1,
+    summary: ["FAIL", "U2 decoupling check failed"],
+    delay: 2100,
     timestamp: nextTs(1700),
     pcb: pcb(
       PLACED_ALL.map((c) =>
@@ -373,12 +401,14 @@ export const DEMO_SNAPSHOTS: BuildSnapshot[] = [
     message: "Adding C7 100nF decoupling capacitor",
     status: "warning",
     tick: "Fix",
-    delay: 1400,
+    drcErrors: 1,
+    summary: ["FIX", "+ C7 100nF"],
+    delay: 1600,
     timestamp: nextTs(1400),
     pcb: pcb(
       [
         ...PLACED_ALL.map((c) =>
-          c.id === "U2" ? withStatus(c, "repairing") : c,
+          c.id === "U2" ? withStatus(c, "repairing", "Adding C7 · 100nF") : c,
         ),
         withStatus(C7, "new"),
       ],
@@ -392,7 +422,9 @@ export const DEMO_SNAPSHOTS: BuildSnapshot[] = [
     message: "Repair complete — VDD net re-routed",
     status: "success",
     tick: "Repaired",
-    delay: 1200,
+    drcErrors: 0,
+    summary: ["FIX", "+ 1 trace updated"],
+    delay: 1300,
     timestamp: nextTs(1200),
     pcb: pcb([...PLACED_ALL, C7], [...ROUTED, traceStatus(T_C7, "new")]),
   },
@@ -403,6 +435,8 @@ export const DEMO_SNAPSHOTS: BuildSnapshot[] = [
     message: "All checks passed",
     status: "success",
     tick: "Done",
+    drcErrors: 0,
+    summary: ["PASS", "All design checks passed"],
     delay: 0,
     timestamp: nextTs(600),
     // Completion reads through the header chip and stage rail, not by
