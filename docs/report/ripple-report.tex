@@ -1,0 +1,360 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage{parskip}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\setlist{nosep}
+
+\title{Ripple: Report and Decision History\\
+\large A self-improving harness that designs circuit boards from a spec}
+\author{Marcos Speroni \and Jovian \and Arjun Cheema \and Jack Li}
+\date{MongoDB Harness Engineering \& Model Wrangling Hackathon \\ September 26, 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Ripple turns an English spec such as ``a board that reads a temperature sensor over I2C, powered from USB-C, with a status LED'' into a routed printed circuit board, grades it against hidden checks the agents never see, and rewrites its own rules, context policy, tool access, workflow and model routing when the numbers say it should. Large boards are split into a work queue of subcircuits that are built, verified and assembled step by step, and the queue survives a kill and restart. MongoDB Atlas holds every spec, board, run, lesson, subcircuit and harness version. This document records why we built it, what we built, and every technical decision we made during the day, including the ones where we chose not to use a framework or tool that was on offer. The thesis of the project is one line: the model didn't get smarter, the harness did.
+\end{abstract}
+
+\tableofcontents
+
+\section{Motivation}
+
+\subsection{The problem the hackathon posed}
+
+The event asked for two things. \textbf{Recursive harnessing}: an agent system whose scaffolding, not just its prompts, is data that the system can inspect and improve. \textbf{Long-horizon engineering}: work that takes many steps, is checkpointed, and resumes after a crash without the context window growing without bound.
+
+Most demos of ``self-improving agents'' improve a prompt. We wanted to improve the whole harness: which rules the coder is given, how much retrieved context it sees, which tools it may call and when, how many repair attempts it gets before escalating, and which model does which job. Each of those is a knob that a human harness engineer would tune by hand. Ripple keeps them in one versioned document and lets a meta-agent propose changes to it, with a gate that keeps, rolls back or rejects each one.
+
+\subsection{Why PCB design}
+
+We needed a domain with three properties.
+
+\begin{enumerate}
+  \item \textbf{Checkable in code.} Whether a board has pull-ups on its I2C lines, a decoupling capacitor within a few millimetres of each supply pin, zero design-rule errors, and every required net connected is a deterministic function of the board's netlist and layout. No LLM judge is needed, so the grade cannot be gamed by the thing being graded.
+  \item \textbf{Real first-attempt failures.} The mistakes behind most first-board respins are well known and small: missing pull-ups, missing decoupling, floating address pins, wrong LED polarity, a shared series resistor. A harness that learns those as rules is learning something a working engineer would recognise.
+  \item \textbf{Naturally long-horizon.} A 20-part board with USB-C power, a regulator, a microcontroller and two sensors is too much for one shot from a cheap model, but it decomposes cleanly into subcircuits that connect only through named nets. That gives the work queue something honest to do.
+\end{enumerate}
+
+\subsection{Why tscircuit}
+
+tscircuit expresses a board as TypeScript and React: \code{<resistor>}, \code{<chip>}, \code{<trace>} inside a \code{<board>}. That mattered for four reasons. The whole team could read and review the generated code without a CAD tool. The compiler, autorouter and design-rule checks run in Node, so compile, route and DRC are ordinary function calls in the loop. The output, Circuit JSON, is a plain array of elements that our own checker can walk. And the same Circuit JSON exports to Gerbers, a bill of materials, a KiCad project and a 3D model, so a passing run ends in files a board house could accept, not a picture.
+
+\section{What we built}
+
+\subsection{The design loop}
+
+\begin{enumerate}
+  \item Retrieve relevant lessons and verified subcircuits from Atlas (vector search, then rerank), sized by the harness config's context policy.
+  \item The \textbf{coder} writes tscircuit source from the spec, the config's rules, the retrieved context and the previous attempt's diagnosis.
+  \item Compile to Circuit JSON, autoroute, run DRC.
+  \item The \textbf{hidden checker} grades the board: connectivity, I2C pull-ups, decoupling distance, tied pins, series LEDs, dividers and RC networks computed from part values, distinct I2C addresses, and zero DRC errors.
+  \item On failure the \textbf{critic} diagnoses the run, proposes the smallest fix, and writes lessons. The loop retries up to the config's repair budget.
+  \item On success the subcircuit goes into the library, lessons that were in context are credited, and the deliverables are written.
+\end{enumerate}
+
+\subsection{The meta-harness}
+
+A batch of training specs runs under the current config. The \textbf{meta-agent} reads the batch's failures, lessons and costs and proposes one change to the config with a rationale. The \textbf{config gate} first checks guardrails, then runs the candidate on a fresh batch and compares scores with its parent. The verdict is \code{kept}, \code{rolled\_back} or \code{rejected}, and every version with its scores and verdict stays in \code{harness\_versions}.
+
+\subsection{The long-horizon path}
+
+For a large spec the \textbf{planner} splits the board into subcircuits, each with its parts, headers and shared nets, validated in code (whitelisted parts, every header owned by exactly one subcircuit, no cycles). Items go into a durable \textbf{work queue} in Atlas. Each step runs the coder for one subcircuit, checks its interface against the plan, and commits the run, the board document and the queue status in one transaction. The \textbf{assembler} reads the finished groups back, packs them without overlap, sizes the board, evaluates the combined source and grades it. Killing the worker mid-step and restarting it resumes from the queue with nothing lost.
+
+\subsection{Atlas as the memory and state layer}
+
+\begin{center}
+\begin{tabular}{@{}L{3.2cm}L{3.6cm}L{8.2cm}@{}}
+\toprule
+Collection & One document is & Used for \\
+\midrule
+\code{harness\_versions} & a harness config & rules, context policy, tool access, workflow, routing, parent, scores, verdict, rationale \\
+\code{specs} & a board task & spec text and train or held-out split; never the checks \\
+\code{subcircuits} & a verified building block & code, description embedding, checks passed, reuse count \\
+\code{boards} & a board version & code, Circuit JSON, metrics, harness version used \\
+\code{work\_queue} & a step of a large board & status, dependencies, heartbeat; drives kill-and-resume \\
+\code{runs} & one attempt or tool result & structured result, cost, model; the replayable trace \\
+\code{lessons} & a learned design rule & pattern, fix, embedding, how often it helped, active flag \\
+\code{spec\_requests} & a request from the web app & inserted by a restricted user, claimed by the worker \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Atlas features in use: Vector Search on three collections, versioned documents for the config history, multi-document transactions and idempotent upserts for the queue, and a change stream that lets the worker pick up spec requests from the web app.
+
+\section{Decision history}
+
+Each decision below gives the context, the options we had, what we chose, why, and what happened afterwards. The order is roughly chronological.
+
+\subsection{D1: Own TypeScript agent loop, not Strands, LangGraph or the Vercel AI SDK}
+
+\textbf{Context.} The design doc listed three candidate agent frameworks: the Strands SDK for the inner agents, LangGraph.js for the graph and its checkpointer, and the Vercel AI SDK for model calls. The default written before kickoff was ``own TypeScript loop, unless someone has built with Strands before''.
+
+\textbf{Decision.} A plain TypeScript loop with no agent framework. Model calls go through one small router; agents are functions that take their dependencies (the model call, the lesson store) as arguments.
+
+\textbf{Reasons.}
+\begin{itemize}
+  \item The harness config is the product. Every knob the meta-agent can turn (retrieval $k$, rerank on or off, which tools an agent may use, the repair budget, plan-first, model per role) has to be a field in a document that the gate can guard and the UI can diff. Frameworks bake most of those choices into graph structure or class configuration, which would have meant a second, implicit harness beside the one we were showing.
+  \item Nobody on the team had shipped with Strands. Learning it on the morning of a one-day event was a risk with no upside for the demo.
+  \item Strands' own Harness Optimizer tunes an agent's context (system prompt, tool docs, skills) from rollouts and rewards. That is a subset of what Ripple evolves, so the honest relationship is as a baseline, not a foundation. It stayed on the nice-to-have list as an ablation row and was not reached.
+  \item Dependency injection made every agent testable with a fake model. The critic, planner and assembler each have a test suite that runs without a network.
+\end{itemize}
+
+\textbf{Outcome.} The router is 80 lines. Swapping the critic's model from GPT-4o-mini to Gemini Flash was an environment variable. The whole loop, gate and ablation runner call the same \code{runBatch}.
+
+\subsection{D2: Our own transactions for checkpointing, not the LangGraph checkpointer}
+
+\textbf{Context.} Long-horizon work needs durable steps. LangGraph ships a checkpointer; the alternative was to write the queue directly on Atlas.
+
+\textbf{Decision.} Own queue on Atlas, decided at the 11:00 go/no-go. A step's run record, its board update and its queue status commit in one multi-document transaction. Run ids are deterministic, so a retried step overwrites rather than duplicates. Workers heartbeat every 30 seconds and stale claims are recovered.
+
+\textbf{Reasons.} A checkpointer stores an opaque graph state. We wanted every step to be a first-class document that the UI can show, the gate can score and a teammate can query, and we wanted the durability story to be Atlas features rather than a library's serialisation format.
+
+\textbf{Outcome.} The finale board was killed with \code{kill -9} while the sensors subcircuit was running; the rerun recovered the item, finished, assembled and passed the hidden checks. Atlas afterwards showed each step exactly once.
+
+\subsection{D3: Plain git, per-person branches and AGENTS.md rather than an IDE-driven workflow such as Kiro}
+
+\textbf{Context.} Spec-driven agentic IDEs were available and would have given us a shared task and spec system inside the editor.
+
+\textbf{Decision.} Keep the repository tooling-neutral: one branch per person, pull requests into \code{main}, and an \code{AGENTS.md} that states ownership, frozen contracts, the hidden-check boundary, the budget rules and the pinned versions. Each person used whichever coding agent they already had.
+
+\textbf{Reasons.} Ripple already keeps its specs, rules and history in Atlas; an IDE-level spec system would have been a second source of truth for the same things, and one that judges could not see. With four laptops and one day, the cost of aligning everyone on a new environment outweighed the benefit. \code{AGENTS.md} did the job that an IDE workflow would have: it told both humans and coding agents where they may edit, what may not change, and what must stay hidden.
+
+\textbf{Outcome.} Well-defined pieces with testable contracts were delegated to a coding agent and reviewed through pull requests like any other contribution: the hidden checker engine and its broken-board tests, the parts whitelist, the reference boards for all twelve specs, and the assembler. Where two people built the same thing in parallel, the version with the better design won and the other was closed.
+
+\subsection{D4: Hidden checks live in code, never in the database}
+
+\textbf{Decision.} All check definitions live under \code{checks/}. Nothing in that folder may be imported by an agent, put into a prompt, embedded for retrieval or exposed through MCP. The database holds only spec text and the train or held-out label.
+
+\textbf{Reasons.} If the checks were data, the meta-agent could read them, and a ``self-improving'' harness that reads its own exam is not improving. Keeping them out of Atlas also keeps them away from the read-only database users the web app and MCP server use.
+
+\textbf{Design.} Check files refer to parts by role and header label, never by component name, because the coder chooses its own names. \code{header:SDA} means every pin-header pin labelled SDA; \code{role:temp\_sensor.VCC} means the canonical supply pin of any whitelisted temperature sensor. Rules are composed from shared blocks (USB-C sink, LDO with input and output capacitors, I2C bus with pull-ups, MCU basics). Analog rules (divider ratio, RC time constant and cutoff) are computed from part values rather than simulated.
+
+\textbf{Proof.} Every spec has a reference board built only from whitelisted parts, and a test renders each one and asserts it passes its own checks with zero DRC errors. A spec without a passing reference is not solvable, and a checker with no passing case is not trustworthy.
+
+\subsection{D5: A parts whitelist, versioned in the config}
+
+\textbf{Decision.} The coder may use only parts from \code{parts/whitelist.json}: 25 entries covering passives, LEDs, a diode, headers, a USB-C receptacle, two 3.3\,V regulators, an ATtiny85 and an STM32F030, an LM75, an SHT40, a BME280 and a 24LC256 EEPROM. Each entry carries the exact footprint string, pin labels, a manufacturer part number, roles and canonical pins. The whitelist version is a field of the harness config, so narrowing it is a change the meta-agent can propose and the gate can refuse.
+
+\textbf{Reasons.} An agent that invents footprints produces boards that never render. A script renders every whitelisted part through the pinned tscircuit and fails on any error; QFN-32 and DFN-8 were dropped because they fail pad-clearance DRC at that version.
+
+\subsection{D6: Pin tscircuit, and turn its supplier lookup off}
+
+\textbf{Decision.} \code{tscircuit@0.0.2646} exactly, never upgraded, never \code{npm audit fix}. The evaluator runs with \code{partsEngineDisabled}.
+
+\textbf{Reasons.} The autorouter and footprint library change between releases; a mid-day upgrade would have invalidated the whitelist and the reference boards. The supplier lookup was found the hard way: the evaluator attached a JLCPCB part to every LED and then reported a polarity mismatch that the direct render path never raised, which failed the first checkpoint attempt at 12:19. Turning the lookup off fixed it and also made the loop work offline.
+
+\subsection{D7: Voyage AI for embeddings and rerank, not Atlas Automated Embeddings}
+
+\textbf{Decision.} Voyage \code{voyage-4} embeddings (1024 dimensions) and \code{rerank-2.5}, called from the worker; three vector indexes, on \code{lessons}, \code{subcircuits} and \code{runs}, which is the limit on an M0 cluster.
+
+\textbf{Reasons.} The design doc gave Automated Embeddings twenty minutes of trying and Voyage as the default. Calling Voyage directly gave us control over what is embedded: short descriptions and lesson text, never raw code, so a lesson retrieves on meaning. The reranker is a config knob, so the meta-agent can turn it off to save cost.
+
+\textbf{Outcome.} Lesson deduplication uses the same vectors: a new lesson whose nearest existing lesson scores at or above 0.965 updates that lesson instead of adding a near-duplicate. The threshold was verified against the live lessons written during the first evolve run.
+
+\subsection{D8: OpenRouter with per-role model routing}
+
+\textbf{Decision.} One router maps an agent role to a tier through the harness config and a tier to a model id. Defaults are \code{openai/gpt-4o-mini} for cheap and \code{anthropic/claude-sonnet-4.5} for strong, overridable by environment variables. Cost comes back from OpenRouter's usage field rather than a price table. Every call is traced to LangSmith.
+
+\textbf{Reasons.} Model routing is one of the knobs the meta-agent controls, so it had to be data. Real cost per call is what the gate compares. The budget rules in \code{AGENTS.md} became stricter during the day: each person got their own small-budget key, cheap models by default, and \code{max\_tokens} always set.
+
+\textbf{Outcome.} In practice the critic and planner ran on Gemini Flash, at \$0.006 to \$0.013 per call. The first evolve round is the best evidence for routing as data: the meta-agent proposed moving the coder to the strong model, and the gate rolled it back because the pass rate stayed at zero while cost per board rose from \$0.002 to \$0.078.
+
+\subsection{D9: The gate has guardrails on the thing that rewrites guardrails}
+
+\textbf{Decision.} Before any batch runs, a proposed config is rejected if it removes a rule, turns off connectivity-before-route, swaps the parts whitelist, gives the coder any MCP tools, grants non-read-only MCP tools, sets the repair budget outside 1 to 6, splits boards below 4 parts, or sets retrieval $k$ outside 0 to 10. Otherwise the candidate runs on a fresh batch and is kept only if its scores beat the parent's.
+
+\textbf{Reasons.} A meta-agent optimising a score will eventually try to weaken the check that produces it. The rejection path had to exist and had to be visible, so rejected versions are stored with their reason next to kept and rolled-back ones.
+
+\subsection{D10: Lessons are gated, reviewed and reversible}
+
+\textbf{Decision.} The critic's lessons pass a quality gate in code: a lesson that names a component designator, a spec id, or a routing constraint is rejected, and held-out specs never produce lessons so the ablation stays clean. Lessons can be retired and restored with a script; retirement keeps the reason.
+
+\textbf{Reasons and outcome.} The first review of the twelve lessons from the evolve run retired three. One said ``decoupling cap within 1\,mm'' and claimed that autorouters enforce a 1\,mm trace limit; the check requires 3\,mm, the coder turned the lesson into a trace-length limit, and autorouting was skipped. Two were duplicates. The critic prompt was tightened in response: use the failure's own numbers, never invent a stricter limit, never add trace constraints, and fix placement before wiring when autorouting was skipped for courtyard errors. This is the loop working as intended: the harness learned something wrong, the gate and a human caught it, and the correction became part of the harness.
+
+\subsection{D11: Subcircuits connect only through named nets}
+
+\textbf{Decision.} A subcircuit is a tscircuit component that returns a \code{<group name=...>} and talks to the rest of the board only through \code{net.V3V3}, \code{net.GND}, \code{net.SDA} and so on. Component names are unique across the board. The assembler measures each group alone, shelf-packs the bounding boxes, sizes the board, writes one source file and evaluates it.
+
+\textbf{Reasons.} A queue only helps if items are independent. Net names are the one interface that the planner can hand every coder in advance and that the interface check can verify per step. Packing by measured bounding boxes means groups never overlap by construction; the autorouter then routes across them.
+
+\textbf{Outcome.} The finale's three groups (power, MCU with ISP header, sensors) assemble into a 47 by 38\,mm board with 20 parts and zero DRC errors, deterministically.
+
+\subsection{D12: A passing run ends in manufacturable files}
+
+\textbf{Decision.} Every finished board exports Gerber layers and drill files, a BOM with manufacturer part numbers, pick-and-place, an assembly drawing, a KiCad project, a 3D model, PCB and schematic images, a netlist, a SPICE netlist, a design report and a manifest for the front end. Exporters are pinned exactly.
+
+\textbf{Reasons.} The stated non-goal is proving a board works on real hardware; the checks prove spec and rule compliance. Shipping the files is the honest way to show what the harness produced and lets anyone check it in a real tool.
+
+\subsection{D13: Web app on Next.js and Vercel, read-only, polling in production}
+
+\textbf{Decision.} The UI is a Next.js app scaffolded with v0 and deployed on Vercel. It reads Atlas through a read-only user. Locally it can stream change streams; on Vercel it polls, because a serverless function cannot hold a stream open. A judge's spec goes in through an insert-only user into \code{spec\_requests}; the worker claims it with a change stream.
+
+\textbf{Reasons.} One writer. The worker is the only process that writes design state, so a UI bug or a leaked reader URI cannot corrupt a run. The 3D board view was chosen over a schematic-first view because a routed PCB changing in front of the audience is the demo.
+
+\subsection{D14: Frozen contracts and a single batch runner}
+
+\textbf{Decision.} \code{HarnessConfig} and \code{RunResult} were frozen at kickoff and change only with the whole team's agreement. \code{runBatch} is the only batch runner; the gate, the meta-agent and the ablation all call it, and the config is caller-supplied so any version can be run.
+
+\textbf{Reasons.} Four people integrating in one afternoon need stable edges. Freezing the two documents that every component reads or writes let the checker, the queue, the router and the UI be built in parallel and meet at 12:30.
+
+\subsection{Decisions not to do things}
+
+\begin{itemize}
+  \item \textbf{No SPICE in the checks.} Analog specs (a 12\,V divider, an RC low-pass, a debounced button) are graded by computing the ratio or time constant from part values. It is exact for the circuits in scope and avoided a simulator dependency in the loop.
+  \item \textbf{No Strands Harness Optimizer baseline and no cheap-versus-frontier ablation row.} Both were nice-to-haves behind the finale board and were not reached.
+  \item \textbf{No model training or fine-tuning.} The thesis is that the harness improves; the model is fixed.
+  \item \textbf{Read-only MCP access last.} The critic and meta-agent can work from the batch summary the loop hands them; direct database access was intentionally the final item.
+  \item \textbf{Boards stay small.} Two layers, roughly 20 parts. The autorouter is the slowest and least predictable component, and every risk we listed about it was real.
+\end{itemize}
+
+\section{Timeline}
+
+\begin{center}
+\begin{tabular}{@{}L{1.4cm}L{13.6cm}@{}}
+\toprule
+Time & What landed on \code{main} \\
+\midrule
+10:39 & Design doc, repo layout, ownership, pinned tscircuit, LED smoke board \\
+10:51 & Workspace scaffold: pinned deps, frozen contracts, index setup, green check \\
+11:03 & 8 training and 4 held-out specs with hidden requirements \\
+11:07 & Hidden checker (connectivity, pull-ups, decoupling, DRC), parts whitelist v1 \\
+11:27 & Versioned harness config; v0 seeded \\
+11:33 & Checker with role and header references and rules for all 12 specs; whitelist v2 \\
+11:41 & Memory: Voyage embeddings, vector search, rerank; 3D front end \\
+11:47 & Reference boards for all 12 specs with a pass test \\
+11:58 & Finale spec, checks and 20-part reference in three groups \\
+12:02 & Compile, evaluate, DRC, metrics, router, coder \\
+12:03 & Durable work queue with kill-and-resume \\
+12:05 & Critic agent with lesson quality gate \\
+12:08 & Assembler \\
+12:15 & Planner agent \\
+12:19 & First checkpoint attempt fails on the JLCPCB LED polarity error \\
+12:33 & Parts engine off; checkpoint passes on \code{t01} with the cheap model \\
+12:36 & Deliverables export \\
+12:40 & Config gate: scores, guardrails, verdicts \\
+12:41 & Critic in the loop, \code{runBoard} and \code{runBatch}, meta-agent, ablation runner \\
+12:45 & Finale queue handler; kill-and-resume dry run passes hidden checks \\
+13:05 & \code{npm run evolve}: first round rolls back ``coder to strong'' \\
+13:07 & Front end reads Atlas; single-board Circuit JSON; honest ablation cost \\
+13:25 & Lesson review: 3 of 12 retired; critic prompt and gate tightened \\
+13:31 & Spec requests worker with change stream; lesson dedupe at 0.965 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Evaluation}
+
+\subsection{What is measured}
+
+\begin{center}
+\begin{tabular}{@{}L{6cm}L{9cm}@{}}
+\toprule
+Metric & Source \\
+\midrule
+Hidden checks passed per board & checker \\
+Attempts per board & \code{runs} \\
+Cost per board & OpenRouter usage per call, summed in \code{runs} \\
+Board area, vias, trace length & Circuit JSON \\
+Config changes kept, rolled back, rejected & \code{harness\_versions} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Evidence so far}
+
+\begin{itemize}
+  \item \textbf{Checkpoint.} One training spec goes from text to a routed board that passes its hidden checks on the first attempt with the cheap model, under a stored config version.
+  \item \textbf{Gate.} The first evolve round on two training specs: v0 passed 0 of 2; the meta-agent proposed routing the coder to the strong model; the candidate also passed 0 of 2 at 37 times the cost per board, and the gate rolled it back. The critic wrote 12 lessons during the round.
+  \item \textbf{Lessons.} After review, 9 active lessons remain, covering I2C pull-ups, address pins, write-protect, supply and capacitor wiring, decoupling distance and courtyard-aware placement.
+  \item \textbf{Long horizon.} The finale board built through the queue, was killed mid-step, resumed, assembled, passed every hidden check, and produced 30 deliverable files.
+\end{itemize}
+
+\subsection{Ablation}
+
+The ablation runs the same model on the four held-out specs under three conditions, with memory writes off so held-out solutions never enter the library. The table is produced by \code{npm run ablation} and is to be filled from that run.
+
+\begin{center}
+\begin{tabular}{@{}L{6.5cm}L{2.6cm}L{2.6cm}L{2.6cm}@{}}
+\toprule
+Setup & Checks passed & Attempts per board & Cost per board \\
+\midrule
+Bare model, no harness & & & \\
+Harness v0: loop and checks, no memory & & & \\
+Harness vN: evolved config, library, lessons & & & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Risks that materialised}
+
+\begin{itemize}
+  \item The evaluator's supplier lookup rewrote LED polarity (D6).
+  \item A learned lesson was wrong and harmful until reviewed (D10).
+  \item Windows checkouts with CRLF line endings broke the finale reference parser and the assembler; fixed with \code{.gitattributes}.
+  \item The pinned autorouter occasionally crashes on a re-render in one process; tests pin only the deterministic netlist rules to exact results.
+  \item The meta-agent's batch summary counted failures by check name only, so it could not see that courtyard overlaps were the cause of skipped autorouting; the fix is to give it the top failure details and the critic's lessons.
+\end{itemize}
+
+\section{Limitations and what we would do next}
+
+Passing the checks proves spec and rule compliance, not that a board works; nothing here replaces a review by an engineer before ordering. The domain is deliberately narrow: two layers, about 20 parts, no high-speed or signal-integrity concerns. The meta-agent so far proposes one change per round and has been better at proposing model changes than rules; feeding it failure details and lessons is the obvious next step. The Strands Harness Optimizer would be a fair external baseline for the context-tuning part of what Ripple does. And the ablation, the single most persuasive artifact, needs its numbers.
+
+\appendix
+
+\section{Repository map}
+
+\begin{center}
+\begin{tabular}{@{}L{5cm}L{10cm}@{}}
+\toprule
+Path & Contents \\
+\midrule
+\code{apps/worker/src/agents/} & coder, critic, planner, meta-agent \\
+\code{apps/worker/src/tools/} & compile, evaluate, DRC, metrics, router, parts whitelist \\
+\code{apps/worker/src/harness/} & config versions, memory, queue, gate \\
+\code{apps/worker/src/assembler/} & subcircuit groups to one board \\
+\code{apps/worker/src/pipeline/} & planned board through the queue \\
+\code{apps/worker/src/export/} & deliverables \\
+\code{apps/web/} & Next.js UI \\
+\code{checks/} & hidden checker, per-spec checks, reference boards (agents never read) \\
+\code{specs/} & public spec text \\
+\code{parts/} & whitelist \\
+\code{scripts/} & green check, index setup, evolve, ablation, finale, lessons \\
+\code{packages/types/} & frozen contracts \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Commands}
+
+\begin{center}
+\begin{tabular}{@{}L{5cm}L{10cm}@{}}
+\toprule
+Command & Does \\
+\midrule
+\code{npm run green} & checks Atlas writer and reader, Voyage, one traced model call \\
+\code{npm run smoke [spec]} & renders a reference board through autorouter and DRC \\
+\code{npm run test:checks} & checker unit tests, broken variants, all reference boards \\
+\code{npm run test:planner}, \code{test:assembler} & agent and assembler tests with fake models \\
+\code{npm run evolve -- --rounds N} & batch, meta-agent proposal, gate verdict \\
+\code{npm run ablation} & bare versus v0 versus evolved on held-out specs \\
+\code{npm run finale [-- --stub]} & the long-horizon board through the queue \\
+\code{npm run lessons} & list, retire, restore lessons \\
+\code{npm run worker} & serve spec requests from the web app \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\end{document}
