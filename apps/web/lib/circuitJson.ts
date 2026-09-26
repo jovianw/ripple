@@ -6,9 +6,10 @@
 
 import type { PCBComponent, PCBComponentType, PCBState, PCBTrace } from "./types";
 
-/** Board width in scene units. Every board is normalised to this, so the
- *  camera framing holds whether the board is 15mm or 80mm across. */
-const TARGET_WIDTH = 12;
+/** Longest board edge, in scene units. Normalising on the *longer* side means
+ *  the camera framing holds for portrait boards as well as landscape ones —
+ *  scaling on width alone makes a tall board overflow the frame. */
+const TARGET_EXTENT = 12;
 
 interface El {
   type: string;
@@ -73,7 +74,8 @@ export function circuitJsonToPCBState(elements: unknown): AdapterResult {
   const boardWidthMm = num(board?.width, 40);
   const boardHeightMm = num(board?.height, 30);
   const origin = pt(board?.center);
-  const scale = boardWidthMm > 0 ? TARGET_WIDTH / boardWidthMm : 1;
+  const longestMm = Math.max(boardWidthMm, boardHeightMm);
+  const scale = longestMm > 0 ? TARGET_EXTENT / longestMm : 1;
 
   // Board plane -> scene plane: recentre, then normalise size.
   const mapX = (x: number) => (x - origin.x) * scale;
@@ -162,7 +164,7 @@ export function circuitJsonToPCBState(elements: unknown): AdapterResult {
       components,
       traces,
       board: {
-        width: TARGET_WIDTH,
+        width: boardWidthMm * scale,
         height: boardHeightMm * scale,
         widthMm: Math.round(boardWidthMm * 10) / 10,
         heightMm: Math.round(boardHeightMm * 10) / 10,
