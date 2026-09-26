@@ -6,7 +6,7 @@ const part = (id: string) => whitelist.parts.find((p) => p.id === id)!.props as 
 
 export const T03Reference = () => (
   <board width="26mm" height="18mm">
-    <connector name="J1" {...part("usb_c_receptacle")} pcbX={-8} pcbY={2} pcbRotation={-90} />
+    <chip name="J1" {...part("usb_c_receptacle")} pcbX={-8} pcbY={2} pcbRotation={-90} />
     <resistor name="R1" resistance="5.1k" footprint="0603" pcbX={-3} pcbY={5} />
     <resistor name="R2" resistance="5.1k" footprint="0603" pcbX={-3} pcbY={-5} />
     <chip name="U1" {...part("ldo_3v3_ap2112k")} pcbX={3} pcbY={0} />
@@ -14,7 +14,7 @@ export const T03Reference = () => (
     <capacitor name="C2" capacitance="1uF" footprint="0603" pcbX={6.2} pcbY={1.2} pcbRotation={90} />
     <led name="LED1" color="green" footprint="0603" pcbX={6} pcbY={5} />
     <resistor name="R3" resistance="1k" footprint="0603" pcbX={2} pcbY={5} />
-    <pinheader name="J2" pinCount={2} pinLabels={["V3V3", "GND"]} footprint="pinrow2" pcbX={10} pcbY={0} pcbRotation={90} />
+    <pinheader name="J2" pinCount={2} pinLabels={["3V3", "GND"]} footprint="pinrow2" pcbX={10} pcbY={0} pcbRotation={90} />
 
     <trace from=".J1 > .VBUS1" to="net.VBUS" />
     <trace from=".J1 > .VBUS2" to="net.VBUS" />
@@ -37,7 +37,7 @@ export const T03Reference = () => (
     <trace from=".R3 > .pin1" to="net.V3V3" />
     <trace from=".R3 > .pin2" to=".LED1 > .anode" />
     <trace from=".LED1 > .cathode" to="net.GND" />
-    <trace from=".J2 > .V3V3" to="net.V3V3" />
+    <trace from=".J2 > .pin1" to="net.V3V3" />
     <trace from=".J2 > .GND" to="net.GND" />
   </board>
 )

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs"
 import { createElement } from "react"
 import { RootCircuit } from "tscircuit"
 
-type Part = { id: string; element: string; props: Record<string, unknown> }
+type Part = { id: string; element: string; props: Record<string, unknown>; exampleProps?: Record<string, unknown> }
 const { parts } = JSON.parse(readFileSync("parts/whitelist.json", "utf8")) as { parts: Part[] }
 
 const defaults: Record<string, Record<string, unknown>> = {
@@ -18,7 +18,7 @@ for (const part of parts) {
   const circuit = new RootCircuit()
   circuit.add(
     <board width="30mm" height="30mm">
-      {createElement(part.element, { name: "U1", ...defaults[part.element], ...part.props })}
+      {createElement(part.element, { name: "U1", ...defaults[part.element], ...part.exampleProps, ...part.props })}
     </board>,
   )
   await circuit.renderUntilSettled()

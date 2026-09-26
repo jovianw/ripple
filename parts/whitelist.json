@@ -1,96 +1,203 @@
 {
-  "version": "v1",
+  "version": "v2",
   "tscircuit": "0.0.2646",
+  "about": "Parts the coder may use. Spread props into the element: <chip name=\"U1\" {...part.props} />. roles and canonicalPins let checks refer to parts by function (e.g. any temp_sensor's VCC pin).",
   "parts": [
     {
-      "id": "resistor_0603",
-      "element": "resistor",
-      "props": {
-        "footprint": "0603"
-      },
-      "notes": "Set resistance, e.g. \"1k\". Pins: pin1, pin2."
-    },
-    {
       "id": "resistor_0402",
+      "kind": "resistor",
       "element": "resistor",
       "props": {
         "footprint": "0402"
       },
-      "notes": "Set resistance. Pins: pin1, pin2."
+      "exampleProps": {
+        "resistance": "10k"
+      },
+      "description": "Resistor, 0402. Pins: pin1, pin2."
+    },
+    {
+      "id": "resistor_0603",
+      "kind": "resistor",
+      "element": "resistor",
+      "props": {
+        "footprint": "0603"
+      },
+      "exampleProps": {
+        "resistance": "10k"
+      },
+      "description": "Resistor, 0603 (default). Pins: pin1, pin2."
+    },
+    {
+      "id": "resistor_0805",
+      "kind": "resistor",
+      "element": "resistor",
+      "props": {
+        "footprint": "0805"
+      },
+      "exampleProps": {
+        "resistance": "10k"
+      },
+      "description": "Resistor, 0805. Pins: pin1, pin2."
+    },
+    {
+      "id": "capacitor_0402",
+      "kind": "capacitor",
+      "element": "capacitor",
+      "props": {
+        "footprint": "0402"
+      },
+      "exampleProps": {
+        "capacitance": "100nF"
+      },
+      "description": "Ceramic capacitor, 0402. Pins: pin1, pin2."
     },
     {
       "id": "capacitor_0603",
+      "kind": "capacitor",
       "element": "capacitor",
       "props": {
         "footprint": "0603"
       },
-      "notes": "Set capacitance, e.g. \"100nF\" or \"1uF\". Pins: pin1, pin2."
+      "exampleProps": {
+        "capacitance": "100nF"
+      },
+      "description": "Ceramic capacitor, 0603 (default for 100nF and 1uF). Pins: pin1, pin2."
     },
     {
       "id": "capacitor_0805",
+      "kind": "capacitor",
       "element": "capacitor",
       "props": {
         "footprint": "0805"
       },
-      "notes": "Use for 10uF bulk caps. Pins: pin1, pin2."
+      "exampleProps": {
+        "capacitance": "10uF"
+      },
+      "description": "Ceramic capacitor, 0805 (bulk up to 10uF). Pins: pin1, pin2."
+    },
+    {
+      "id": "capacitor_1206",
+      "kind": "capacitor",
+      "element": "capacitor",
+      "props": {
+        "footprint": "1206"
+      },
+      "exampleProps": {
+        "capacitance": "22uF"
+      },
+      "description": "Ceramic capacitor, 1206 (bulk). Pins: pin1, pin2."
     },
     {
       "id": "led_0603",
+      "kind": "led",
       "element": "led",
       "props": {
         "footprint": "0603"
       },
-      "notes": "Set color (red, green, blue). Pins: anode, cathode. Always needs a series resistor. Vf ~2.0V red/green, ~3.0V blue."
+      "exampleProps": {
+        "color": "red"
+      },
+      "description": "LED, 0603. Pins: anode, cathode.",
+      "notes": "Always needs its own series resistor. Vf ~2.0V red/green, ~3.0V blue."
+    },
+    {
+      "id": "led_0805",
+      "kind": "led",
+      "element": "led",
+      "props": {
+        "footprint": "0805"
+      },
+      "exampleProps": {
+        "color": "green"
+      },
+      "description": "LED, 0805. Pins: anode, cathode.",
+      "notes": "Always needs its own series resistor."
+    },
+    {
+      "id": "diode_sod123",
+      "kind": "diode",
+      "element": "diode",
+      "props": {
+        "footprint": "sod123"
+      },
+      "description": "Schottky diode, SOD-123 (e.g. B5819W). Pins: anode, cathode."
     },
     {
       "id": "pushbutton_smd",
+      "kind": "switch",
       "element": "pushbutton",
       "props": {
         "footprint": "pushbutton"
       },
-      "notes": "4-pin tactile switch. pin1/pin2 are one side, pin3/pin4 the other."
+      "description": "Tactile pushbutton, 4 pins.",
+      "notes": "pin1/pin2 are one side, pin3/pin4 the other."
+    },
+    {
+      "id": "crystal_hc49",
+      "kind": "crystal",
+      "element": "crystal",
+      "props": {
+        "footprint": "hc49",
+        "loadCapacitance": "20pF"
+      },
+      "exampleProps": {
+        "frequency": "16MHz"
+      },
+      "description": "Crystal, HC-49. Pins: pin1, pin2."
     },
     {
       "id": "header_2",
+      "kind": "connector",
       "element": "pinheader",
       "props": {
         "pinCount": 2,
         "footprint": "pinrow2"
       },
-      "notes": "Set pinLabels, e.g. [\"VCC\",\"GND\"]."
+      "description": "Pin header 1x2, 2.54mm.",
+      "notes": "Set pinLabels to the labels the spec names, e.g. [\"3V3\",\"GND\"]."
     },
     {
       "id": "header_3",
+      "kind": "connector",
       "element": "pinheader",
       "props": {
         "pinCount": 3,
         "footprint": "pinrow3"
       },
-      "notes": "Set pinLabels."
+      "description": "Pin header 1x3, 2.54mm.",
+      "notes": "Set pinLabels to the labels the spec names, e.g. [\"3V3\",\"GND\"]."
     },
     {
       "id": "header_4",
+      "kind": "connector",
       "element": "pinheader",
       "props": {
         "pinCount": 4,
         "footprint": "pinrow4"
       },
-      "notes": "Set pinLabels."
+      "description": "Pin header 1x4, 2.54mm.",
+      "notes": "Set pinLabels to the labels the spec names, e.g. [\"3V3\",\"GND\"]."
     },
     {
       "id": "header_6",
+      "kind": "connector",
       "element": "pinheader",
       "props": {
         "pinCount": 6,
         "footprint": "pinrow6"
       },
-      "notes": "Set pinLabels. Used for the ATtiny85 ISP header."
+      "description": "Pin header 1x6, 2.54mm.",
+      "notes": "Set pinLabels to the labels the spec names, e.g. [\"3V3\",\"GND\"]."
     },
     {
       "id": "usb_c_receptacle",
-      "element": "connector",
+      "kind": "connector",
+      "element": "chip",
+      "roles": [
+        "usb_c"
+      ],
       "props": {
-        "standard": "usb_c",
+        "manufacturerPartNumber": "USB4105-GF-A",
         "footprint": "usbcmidmount",
         "pinLabels": {
           "pin1": "SHIELD1",
@@ -109,13 +216,40 @@
           "pin14": "CC2",
           "pin15": "VBUS2",
           "pin16": "GND2"
+        },
+        "pinAttributes": {
+          "GND1": {
+            "requiresGround": true
+          },
+          "GND2": {
+            "requiresGround": true
+          },
+          "VBUS1": {
+            "requiresPower": true
+          },
+          "VBUS2": {
+            "requiresPower": true
+          }
         }
       },
-      "notes": "USB 2.0 Type-C receptacle, 16-pin mid-mount. As a power sink: tie VBUS1+VBUS2 to 5V, GND1+GND2 to GND, and pull CC1 and CC2 to GND with separate 5.1k resistors. Pad map follows the common 16-pin layout; confirm against the chosen part's datasheet before ordering."
+      "canonicalPins": {
+        "VBUS": "VBUS1",
+        "VBUS2": "VBUS2",
+        "GND": "GND1",
+        "GND2": "GND2",
+        "CC1": "CC1",
+        "CC2": "CC2"
+      },
+      "description": "USB 2.0 Type-C receptacle, 16-pin mid-mount.",
+      "notes": "As a power sink: VBUS1+VBUS2 to 5V, GND1+GND2 (and SHIELD*) to GND, and CC1 and CC2 each to GND through its own 5.1k resistor. Pins 1-4 are the shell tabs; contacts follow the standard 16-pin order (GND, VBUS, SBU2, CC1, DN2, DP1, DN1, DP2, SBU1, CC2, VBUS, GND). Confirm against the datasheet before ordering."
     },
     {
       "id": "ldo_3v3_ap2112k",
+      "kind": "regulator",
       "element": "chip",
+      "roles": [
+        "ldo_3v3"
+      ],
       "props": {
         "manufacturerPartNumber": "AP2112K-3.3",
         "footprint": "sot23_5",
@@ -142,11 +276,60 @@
           }
         }
       },
-      "notes": "3.3V 600mA LDO, 2.5-6V in. 1uF on VIN and 1uF on VOUT, close to the pins. Tie EN to VIN to keep it on."
+      "canonicalPins": {
+        "VIN": "VIN",
+        "GND": "GND",
+        "EN": "EN",
+        "VOUT": "VOUT"
+      },
+      "description": "3.3V 600mA LDO, SOT-23-5, 2.5-6V in.",
+      "notes": "1uF on VIN and 1uF on VOUT, close to the pins. Tie EN to VIN to keep it on."
+    },
+    {
+      "id": "ldo_3v3_ams1117",
+      "kind": "regulator",
+      "element": "chip",
+      "roles": [
+        "ldo_3v3"
+      ],
+      "props": {
+        "manufacturerPartNumber": "AMS1117-3.3",
+        "footprint": "sot223",
+        "pinLabels": {
+          "pin1": "GND",
+          "pin2": "VOUT",
+          "pin3": "VIN",
+          "pin4": "TAB"
+        },
+        "pinAttributes": {
+          "VIN": {
+            "requiresPower": true
+          },
+          "GND": {
+            "requiresGround": true
+          },
+          "VOUT": {
+            "providesPower": true,
+            "providesVoltage": "3.3V"
+          }
+        }
+      },
+      "canonicalPins": {
+        "VIN": "VIN",
+        "GND": "GND",
+        "VOUT": "VOUT"
+      },
+      "description": "3.3V 1A LDO, SOT-223, 4.5-15V in.",
+      "notes": "TAB is internally VOUT; connect it to VOUT. 10uF on VIN and VOUT."
     },
     {
       "id": "temp_sensor_lm75",
+      "kind": "sensor",
       "element": "chip",
+      "roles": [
+        "temp_sensor",
+        "i2c_device"
+      ],
       "props": {
         "manufacturerPartNumber": "LM75B",
         "footprint": "soic8",
@@ -169,11 +352,27 @@
           }
         }
       },
-      "notes": "I2C temperature sensor, 2.8-5.5V. Address 0x48 + A2..A0; tie each address pin to GND or VCC. 100nF on VCC. OS is an open-drain output; may be left unconnected."
+      "canonicalPins": {
+        "VCC": "VCC",
+        "GND": "GND",
+        "SDA": "SDA",
+        "SCL": "SCL",
+        "A0": "A0",
+        "A1": "A1",
+        "A2": "A2"
+      },
+      "description": "LM75B I2C temperature sensor, SOIC-8, 2.8-5.5V.",
+      "notes": "Address 0x48 + A2..A0; tie each address pin to GND or VCC. 100nF on VCC. OS is open-drain; may be left unconnected."
     },
     {
       "id": "humidity_sensor_sht40",
+      "kind": "sensor",
       "element": "chip",
+      "roles": [
+        "humidity_sensor",
+        "temp_sensor",
+        "i2c_device"
+      ],
       "props": {
         "manufacturerPartNumber": "SHT40-AD1B",
         "footprint": "dfn4_w1.5mm_h1.5mm_p0.8mm_pl0.5mm_pw0.3mm",
@@ -192,11 +391,73 @@
           }
         }
       },
-      "notes": "I2C humidity and temperature sensor, 1.08-3.6V (not 5V tolerant). Fixed address 0x44. 100nF on VDD."
+      "canonicalPins": {
+        "VCC": "VDD",
+        "GND": "VSS",
+        "SDA": "SDA",
+        "SCL": "SCL"
+      },
+      "description": "SHT40 I2C humidity and temperature sensor, DFN-4, 1.08-3.6V (not 5V tolerant).",
+      "notes": "Fixed address 0x44. 100nF on VDD."
+    },
+    {
+      "id": "env_sensor_bme280",
+      "kind": "sensor",
+      "element": "chip",
+      "roles": [
+        "humidity_sensor",
+        "temp_sensor",
+        "i2c_device"
+      ],
+      "props": {
+        "manufacturerPartNumber": "BME280",
+        "footprint": "lga8_w2.5_h2.5_p0.65",
+        "pinLabels": {
+          "pin1": "GND",
+          "pin2": "CSB",
+          "pin3": "SDI",
+          "pin4": "SCK",
+          "pin5": "SDO",
+          "pin6": "VDDIO",
+          "pin7": "GND2",
+          "pin8": "VDD"
+        },
+        "pinAttributes": {
+          "VDD": {
+            "requiresPower": true
+          },
+          "VDDIO": {
+            "requiresPower": true
+          },
+          "GND": {
+            "requiresGround": true
+          },
+          "GND2": {
+            "requiresGround": true
+          }
+        }
+      },
+      "canonicalPins": {
+        "VCC": "VDD",
+        "VCC2": "VDDIO",
+        "GND": "GND",
+        "GND2": "GND2",
+        "SDA": "SDI",
+        "SCL": "SCK",
+        "CSB": "CSB",
+        "SDO": "SDO"
+      },
+      "description": "BME280 I2C temperature/humidity/pressure sensor, LGA-8, 1.71-3.6V.",
+      "notes": "I2C mode: SDI=SDA, SCK=SCL, tie CSB to VDDIO, SDO to GND (0x76) or VDDIO (0x77). 100nF on VDD and VDDIO."
     },
     {
       "id": "eeprom_24lc256",
+      "kind": "memory",
       "element": "chip",
+      "roles": [
+        "eeprom",
+        "i2c_device"
+      ],
       "props": {
         "manufacturerPartNumber": "24LC256",
         "footprint": "soic8",
@@ -219,11 +480,26 @@
           }
         }
       },
-      "notes": "256Kbit I2C EEPROM, 2.5-5.5V. Address 0x50 + A2..A0; tie each address pin to a rail. Tie WP to GND to allow writes. 100nF on VCC."
+      "canonicalPins": {
+        "VCC": "VCC",
+        "GND": "VSS",
+        "SDA": "SDA",
+        "SCL": "SCL",
+        "A0": "A0",
+        "A1": "A1",
+        "A2": "A2",
+        "WP": "WP"
+      },
+      "description": "24LC256 256Kbit I2C EEPROM, SOIC-8, 2.5-5.5V.",
+      "notes": "Address 0x50 + A2..A0; tie each address pin to a rail. Tie WP to GND to allow writes. 100nF on VCC."
     },
     {
       "id": "mcu_attiny85",
+      "kind": "mcu",
       "element": "chip",
+      "roles": [
+        "mcu"
+      ],
       "props": {
         "manufacturerPartNumber": "ATtiny85-20SU",
         "footprint": "soic8",
@@ -246,7 +522,76 @@
           }
         }
       },
-      "notes": "8-bit MCU, 2.7-5.5V. 100nF on VCC. 10k pull-up on RESET. ISP header order: 1 MISO, 2 VCC, 3 SCK, 4 MOSI, 5 RESET, 6 GND. Hardware I2C (USI): SDA = PB0, SCL = PB2."
+      "canonicalPins": {
+        "VCC": "VCC",
+        "GND": "GND",
+        "RESET": "PB5_RESET",
+        "SDA": "PB0_MOSI_SDA",
+        "SCL": "PB2_SCK_SCL",
+        "MOSI": "PB0_MOSI_SDA",
+        "MISO": "PB1_MISO",
+        "SCK": "PB2_SCK_SCL"
+      },
+      "description": "ATtiny85 8-bit MCU, SOIC-8, 2.7-5.5V.",
+      "notes": "100nF on VCC. 10k pull-up on RESET. ISP header order: 1 MISO, 2 VCC, 3 SCK, 4 MOSI, 5 RESET, 6 GND. I2C (USI): SDA=PB0, SCL=PB2."
+    },
+    {
+      "id": "mcu_stm32f030",
+      "kind": "mcu",
+      "element": "chip",
+      "roles": [
+        "mcu"
+      ],
+      "props": {
+        "manufacturerPartNumber": "STM32F030F4P6",
+        "footprint": "tssop20",
+        "pinLabels": {
+          "pin1": "BOOT0",
+          "pin2": "PF0",
+          "pin3": "PF1",
+          "pin4": "NRST",
+          "pin5": "VDDA",
+          "pin6": "PA0",
+          "pin7": "PA1",
+          "pin8": "PA2",
+          "pin9": "PA3",
+          "pin10": "PA4",
+          "pin11": "PA5",
+          "pin12": "PA6",
+          "pin13": "PA7",
+          "pin14": "PB1",
+          "pin15": "VSS",
+          "pin16": "VDD",
+          "pin17": "PA9",
+          "pin18": "PA10",
+          "pin19": "SWDIO",
+          "pin20": "SWCLK"
+        },
+        "pinAttributes": {
+          "VDD": {
+            "requiresPower": true
+          },
+          "VDDA": {
+            "requiresPower": true
+          },
+          "VSS": {
+            "requiresGround": true
+          }
+        }
+      },
+      "canonicalPins": {
+        "VCC": "VDD",
+        "VCC2": "VDDA",
+        "GND": "VSS",
+        "RESET": "NRST",
+        "SDA": "PA10",
+        "SCL": "PA9",
+        "SWDIO": "SWDIO",
+        "SWCLK": "SWCLK",
+        "BOOT0": "BOOT0"
+      },
+      "description": "STM32F030F4 32-bit MCU, TSSOP-20, 2.4-3.6V.",
+      "notes": "VDD and VDDA to 3.3V with 100nF each; VSS to GND. BOOT0 to GND via 10k. I2C1: PA10=SDA, PA9=SCL. Debug header: SWDIO, SWCLK, NRST, 3V3, GND."
     }
   ]
 }
