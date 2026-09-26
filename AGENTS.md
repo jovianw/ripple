@@ -20,6 +20,8 @@ Stay inside your person's area. To change another area, ask its owner.
 
 Per-person task list and timings: DESIGN.md §6.
 
+**Atlas, harness config, memory, work queue:** use the APIs in [apps/worker/src/harness/README.md](apps/worker/src/harness/README.md) (`currentConfig`, `propose`, `retrieveLessons`, `addLesson`, `retrieveSubcircuits`, `enqueue`, `runQueue`, ...). Read it before touching Atlas from worker code; don't query or write the collections directly when a function exists.
+
 ## Rules
 
 - **Contracts are frozen.** `HarnessConfig` and `RunResult` in `packages/types` change only with team agreement.
@@ -27,7 +29,7 @@ Per-person task list and timings: DESIGN.md §6.
 - **Parts come from the whitelist.** The coder may only use parts in `parts/whitelist.json` (agent-visible). Add a part only if `npm run verify:parts` passes.
 - **One writer.** Only the worker writes to Atlas. The web app and MCP server use `MONGODB_URI_READER`.
 - **No secrets in git.** Keys live in `.env` (gitignored). Never commit `.env`, `.mcp.json`, or API keys; share keys privately.
-- **Watch OpenRouter spend.** Shared budget is $100 for the day. Log cost per call; use cheap models while developing.
+- **Watch OpenRouter spend.** Each person uses their own OpenRouter key, and each key has a small budget (around $10). Use the cheap model (e.g. `google/gemini-3.8-flash`) for development, tests and the coder; strong models only for the planner, meta-agent and demo runs. Always set `max_tokens`. Log cost per call.
 - **Pin tscircuit.** `tscircuit@0.0.2646` (exact). Don't upgrade it.
 - **Ignore install warnings.** `npm install` prints peer-dependency warnings and audit findings from inside tscircuit's own packages. They're expected. Never run `npm audit fix` or `--force`; it breaks the pinned versions.
 
@@ -49,6 +51,9 @@ Check tscircuit works: `npm run smoke` renders `examples/led-board.tsx` through 
 | `npm run smoke t03` | Reference USB-C → 3.3V board (hidden) through autorouter + DRC |
 | `npm run verify:parts` | Renders every whitelisted part |
 | `npm run test:checks` | Hidden checker tests (good boards pass, broken boards fail) |
+| `npm run green` | Checks Atlas writer, read-only reader, Voyage, OpenRouter + LangSmith |
+| `npm run setup:indexes` / `npm run seed:config` | Atlas collections and indexes / harness config v0 (both done; safe to re-run) |
+| `npm run queue:demo` | Work-queue kill-and-resume demo (Ctrl+C mid-run, rerun, it resumes) |
 
 ## Specs and parts
 

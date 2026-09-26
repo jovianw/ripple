@@ -227,7 +227,7 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 | Jack | Front end: UI, PCB preview, Vercel deploys, README, video and submission |
 
 ### Everyone
-- [ ] **10:30–11:15** Kickoff: repo, pinned versions, decisions table, freeze `HarnessConfig` and `RunResult`, index setup, green check
+- [x] **10:30–11:15** Kickoff: repo, pinned versions, decisions table, freeze `HarnessConfig` and `RunResult`, index setup, green check (`npm run green` all green)
 - [ ] **12:30** Checkpoint: one board goes spec → routed PCB → passes hidden checks under a stored config version
 - [ ] **3:30** Feature freeze; record a full backup run
 - [ ] **3:30–4:30** Polish and rehearse the demo twice
@@ -237,8 +237,9 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 - [ ] **Before 10:30** Install tscircuit on every laptop; build an LED-plus-resistor board through the autorouter (`npm run smoke`; done on Marcos's laptop)
 - [ ] 10-minute PCB primer for the team at kickoff
 - [x] **11:00–12:30** 8 training and 4 held-out specs (`specs/specs.json`); hidden checker returning `RunResult` (`checks/`, `npm run test:checks`); reference board per spec
-- [ ] **12:30–1:30** Critic agent (code and prompt) and lesson extraction into Atlas
-- [ ] **1:30–2:30** Planner agent and assembler
+- [x] **12:30–1:30** Critic agent (code and prompt) and lesson extraction into Atlas (`apps/worker/src/agents/critic/`: strict JSON output, lesson quality gate, no lessons from held-out specs; `npm run try:critic`. Takes Arjun's router as `complete` and Jovian's `addLesson`)
+- [x] **1:30–2:30** Planner agent (`apps/worker/src/agents/planner/`: returns work items for `queue.enqueue`, validated in code, honors `plan_first` and `split_over_parts`, replans keep done items; `checkInterface` for step checks; `npm run test:planner`, `npm run try:planner`)
+- [ ] Assembler (Fable agent on `dev-marcos-assembler`)
 - [x] Parts whitelist (`parts/whitelist.json` v2, `npm run verify:parts`)
 - [x] Finale board spec (`specs/finale.json`), checks, and 20-part reference board in three groups (`npm run smoke finale`)
 - [ ] **2:30–3:30** Finale first full run through the work queue
@@ -249,7 +250,7 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 - [x] **10:30–11:00** `db.ts`, index setup script; LangGraph go/no-go by 11:00 (`npm run setup:indexes`, `npm run green`; LangGraph: took the default, own transactions)
 - [x] **11:00–12:00** Config versioning: `harness_versions`, current config, propose (`apps/worker/src/harness/config.ts`: `currentConfig`, `getConfig`, `history`, `propose`; v0 seeded with `npm run seed:config`)
 - [x] **12:00–1:00** Memory: Voyage embeddings, vector indexes, retrieval and rerank (`apps/worker/src/harness/memory.ts`: `addLesson`/`retrieveLessons`, `addSubcircuit`/`retrieveSubcircuits`, `indexFailure`/`similarFailures`; k and rerank come from `config.context`)
-- [ ] **1:00–2:00** Work queue, transactions, idempotent runs, heartbeat, resume
+- [x] **1:00–2:00** Work queue, transactions, idempotent runs, heartbeat, resume (`apps/worker/src/harness/queue.ts`: `enqueue`, `runQueue(boardId, handler)`, `complete`/`fail` in transactions; kill-and-resume verified with `npm run queue:demo`)
 - [ ] **2:00–3:00** Config gate (keep, roll back, reject); change-stream triggers for critic and meta-agent
 - [ ] **3:00–3:30** Help run the finale board through the queue with kill-and-resume
 

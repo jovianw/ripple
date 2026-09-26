@@ -17,6 +17,7 @@
   "exclude": [
     "src/**/*.test.ts",
     "src/agents/coder-loop.ts",
-    "src/agents/coder-loop.verify.ts"
+    "src/agents/coder-loop.verify.ts",
+    "src/**/*.test.tsx"
   ]
 }

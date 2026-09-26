@@ -21,6 +21,7 @@
   "include": [
     "scripts/*.tsx",
     "examples",
-    "checks/reference"
+    "checks/reference",
+    "apps/worker/src/**/*.test.tsx"
   ]
 }
