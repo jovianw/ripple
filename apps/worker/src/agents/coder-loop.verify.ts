@@ -1,7 +1,6 @@
 // Local verification for coder-loop.ts. Not part of the public API.
 // Uses real OpenRouter, Voyage, and Atlas — requires .env to be filled in.
-// Run with tsx (coder-loop.ts crosses into checks/, which tsc -b apps/worker
-// can't type-check — see apps/worker/tsconfig.json's exclude list):
+// Run with:
 //   npx tsx --env-file-if-exists=.env apps/worker/src/agents/coder-loop.verify.ts
 import { client } from "../db.js";
 import { runCheckpointLoop } from "./coder-loop.js";

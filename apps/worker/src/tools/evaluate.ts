@@ -21,6 +21,10 @@ export async function evaluateCircuitSource(source: string): Promise<CompileResu
 
   try {
     await runner.setDisableCdnLoading(true);
+    // Without this, eval attaches JLCPCB supplier parts; the 0603 LED's
+    // supplier part has reversed pin-1 polarity and fails DRC even on a
+    // correct board (same fix as assembler.ts).
+    await runner.setPlatformConfigProperty("partsEngineDisabled", true);
     // execute() expects source that imperatively calls circuit.add(...);
     // executeWithFsMap() auto-wraps a default-exported component instead,
     // matching the `export default () => (<board>...)` pattern LLMs write.

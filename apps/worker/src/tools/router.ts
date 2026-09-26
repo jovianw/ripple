@@ -12,6 +12,10 @@ const MODEL_IDS: Record<ModelTier, string> = {
   strong: process.env.MODEL_STRONG || "anthropic/claude-sonnet-4.5",
 };
 
+// Every call is capped (AGENTS.md: always set max_tokens). A whole board of
+// TSX fits comfortably; callers can raise it per call.
+const DEFAULT_MAX_TOKENS = 4000;
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
@@ -21,6 +25,7 @@ export interface CallModelInput {
   role: AgentName;
   messages: ChatMessage[];
   config: HarnessConfig;
+  maxTokens?: number;
 }
 
 export interface RouterCallResult {
@@ -35,7 +40,7 @@ export interface RouterCallResult {
 
 const langsmith = process.env.LANGSMITH_TRACING === "true" ? new LangSmith() : undefined;
 
-async function openRouterCall(model: string, messages: ChatMessage[]) {
+async function openRouterCall(model: string, messages: ChatMessage[], maxTokens: number) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
 
@@ -49,7 +54,7 @@ async function openRouterCall(model: string, messages: ChatMessage[]) {
     },
     // usage.include asks OpenRouter to return real cost in the response
     // instead of us maintaining a per-model price table.
-    body: JSON.stringify({ model, messages, usage: { include: true } }),
+    body: JSON.stringify({ model, messages, max_tokens: maxTokens, usage: { include: true } }),
   });
 
   if (!res.ok) {
@@ -68,7 +73,7 @@ async function openRouterCall(model: string, messages: ChatMessage[]) {
   };
 }
 
-export async function callModel({ role, messages, config }: CallModelInput): Promise<RouterCallResult> {
+export async function callModel({ role, messages, config, maxTokens = DEFAULT_MAX_TOKENS }: CallModelInput): Promise<RouterCallResult> {
   const tier = config.routing[role];
   const model = MODEL_IDS[tier];
 
@@ -76,7 +81,7 @@ export async function callModel({ role, messages, config }: CallModelInput): Pro
   // pattern); falls back to a plain call otherwise so tracing setup never
   // blocks the router.
   const call = langsmith
-    ? traceable((m: string, msgs: ChatMessage[]) => openRouterCall(m, msgs), {
+    ? traceable((m: string, msgs: ChatMessage[], max: number) => openRouterCall(m, msgs, max), {
         name: `router:${role}`,
         run_type: "llm",
         client: langsmith,
@@ -84,7 +89,7 @@ export async function callModel({ role, messages, config }: CallModelInput): Pro
       })
     : openRouterCall;
 
-  const data = await call(model, messages);
+  const data = await call(model, messages, maxTokens);
 
   return {
     content: data.choices[0].message.content,
