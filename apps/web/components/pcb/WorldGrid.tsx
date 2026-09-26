@@ -15,10 +15,10 @@ export function WorldGrid() {
       infiniteGrid
       cellSize={1}
       cellThickness={0.5}
-      cellColor="#1b2530"
+      cellColor="#2b3242"
       sectionSize={5}
       sectionThickness={0.8}
-      sectionColor="#24323f"
+      sectionColor="#363f52"
       fadeDistance={36}
       fadeStrength={2.2}
       fadeFrom={0}
