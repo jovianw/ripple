@@ -6,6 +6,7 @@ import type { CircuitJson } from "tscircuit";
 import { callModel, type ChatMessage } from "../tools/router.js";
 import { evaluateCircuitSource } from "../tools/evaluate.js";
 import { keepPlacement, normalizeCoderSource } from "../tools/normalize.js";
+import { settlePlacement } from "../tools/placement.js";
 import { EvaluateError } from "../tools/evaluate.js";
 import { runDrc, type DrcResult } from "../tools/drc.js";
 import { computeMetrics, type CircuitMetrics } from "../tools/metrics.js";
@@ -141,7 +142,7 @@ export async function runCoder(input: CoderInput): Promise<CoderResult> {
   // normalizeCoderSource lifts that limit (the hidden checks still enforce 3mm placement) and fixes selector slips.
   const normalized = normalizeCoderSource(extractSource(routerResult.content));
   // On a repair, parts the coder un-pinned while editing go back where they were.
-  const source = input.previousSource ? keepPlacement(normalized, input.previousSource) : normalized;
+  let source = input.previousSource ? keepPlacement(normalized, input.previousSource) : normalized;
 
   const model: CoderModelInfo = {
     model: routerResult.model,
@@ -155,6 +156,15 @@ export async function runCoder(input: CoderInput): Promise<CoderResult> {
   let circuitJson: CircuitJson;
   try {
     ({ circuitJson } = await evaluateCircuitSource(source));
+    // A repair pins every existing part; parts it adds or moves land wherever the model guessed (or nowhere),
+    // often on top of others. Fit just those at the nearest clear spot, and render again.
+    if (input.previousSource) {
+      const placed = settlePlacement(source, circuitJson, input.previousSource);
+      if (placed !== source) {
+        source = placed;
+        ({ circuitJson } = await evaluateCircuitSource(source));
+      }
+    }
   } catch (err) {
     if (!(err instanceof EvaluateError)) throw err;
     const cause = err.cause instanceof Error ? err.cause.message : String(err.cause ?? "");
