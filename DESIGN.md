@@ -245,9 +245,9 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 
 ### Jovian: harness core and memory
 - [x] Repo layout, `.env.example`, shared types package (done before kickoff)
-- [ ] **10:30–11:00** `db.ts`, index setup script; LangGraph go/no-go by 11:00
-- [ ] **11:00–12:00** Config versioning: `harness_versions`, current config, propose
-- [ ] **12:00–1:00** Memory: Voyage embeddings, vector indexes, retrieval and rerank
+- [x] **10:30–11:00** `db.ts`, index setup script; LangGraph go/no-go by 11:00 (`npm run setup:indexes`, `npm run green`; LangGraph: took the default, own transactions)
+- [x] **11:00–12:00** Config versioning: `harness_versions`, current config, propose (`apps/worker/src/harness/config.ts`: `currentConfig`, `getConfig`, `history`, `propose`; v0 seeded with `npm run seed:config`)
+- [x] **12:00–1:00** Memory: Voyage embeddings, vector indexes, retrieval and rerank (`apps/worker/src/harness/memory.ts`: `addLesson`/`retrieveLessons`, `addSubcircuit`/`retrieveSubcircuits`, `indexFailure`/`similarFailures`; k and rerank come from `config.context`)
 - [ ] **1:00–2:00** Work queue, transactions, idempotent runs, heartbeat, resume
 - [ ] **2:00–3:00** Config gate (keep, roll back, reject); change-stream triggers for critic and meta-agent
 - [ ] **3:00–3:30** Help run the finale board through the queue with kill-and-resume
