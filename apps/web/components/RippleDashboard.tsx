@@ -14,14 +14,22 @@ import { ComponentInspector } from "@/components/pcb/ComponentInspector";
 import { PCBViewport } from "@/components/pcb/PCBViewport";
 import { WorldHud } from "@/components/pcb/WorldHud";
 import { DEFAULT_PROMPT, DEMO_SNAPSHOTS } from "@/lib/demoSnapshots";
+import { buildSnapshotsFromBoard, type RealBoardPayload } from "@/lib/realRun";
 import { deriveMetrics } from "@/lib/metrics";
 import { diffPCBStates } from "@/lib/pcbDiff";
-import { EMPTY_PCB, type PCBComponent } from "@/lib/types";
+import { getJson } from "@/lib/usePolling";
+import { EMPTY_PCB, type BuildSnapshot, type PCBComponent } from "@/lib/types";
+import type { RunDoc } from "@/lib/live";
 
-// Where the backend will plug in: today the snapshots come from a scripted
-// array, later from an API or change stream. Nothing below this component
-// knows the difference — it all takes BuildSnapshot props.
-const SNAPSHOTS = DEMO_SNAPSHOTS;
+// A run is just a BuildSnapshot[]. It can come from the scripted walkthrough
+// or from a board Ripple actually built — the scene cannot tell the difference,
+// which is the point of the seam.
+interface RunSource {
+  kind: "scripted" | "real";
+  label: string;
+}
+
+const SCRIPTED: RunSource = { kind: "scripted", label: "scripted walkthrough" };
 
 // Which board's deliverables the finished run corresponds to. Becomes the real
 // board id once runs are persisted; the panel takes it as a prop either way.
@@ -57,6 +65,8 @@ export function RippleDashboard() {
   const [isRunning, setIsRunning] = useState(false);
   const [selected, setSelected] = useState<PCBComponent | null>(null);
   const [showDeliverables, setShowDeliverables] = useState(false);
+  const [snapshots, setSnapshots] = useState<BuildSnapshot[]>(DEMO_SNAPSHOTS);
+  const [source, setSource] = useState<RunSource>(SCRIPTED);
 
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   // Timers read liveness from a ref so scrubbing never has to cancel the run:
@@ -70,36 +80,43 @@ export function RippleDashboard() {
 
   useEffect(() => clearTimers, [clearTimers]);
 
-  const runDemo = useCallback(() => {
-    clearTimers();
-    liveRef.current = true;
-    setIsLive(true);
-    setSelected(null);
-    setIsRunning(true);
-    setShowDeliverables(false);
-    setRevealed(1);
-    setCurrentIndex(0);
+  const play = useCallback(
+    (sequence: BuildSnapshot[]) => {
+      clearTimers();
+      liveRef.current = true;
+      setIsLive(true);
+      setSelected(null);
+      setIsRunning(true);
+      setShowDeliverables(false);
+      setSnapshots(sequence);
+      setRevealed(1);
+      setCurrentIndex(0);
 
-    let at = 0;
-    for (let i = 1; i < SNAPSHOTS.length; i++) {
-      at += SNAPSHOTS[i - 1].delay ?? 800;
-      const index = i;
-      timers.current.push(
-        setTimeout(() => {
-          setRevealed(index + 1);
-          if (liveRef.current) setCurrentIndex(index);
-          if (index === SNAPSHOTS.length - 1) setIsRunning(false);
-        }, at),
-      );
-    }
-  }, [clearTimers]);
+      let at = 0;
+      for (let i = 1; i < sequence.length; i++) {
+        at += sequence[i - 1].delay ?? 800;
+        const index = i;
+        timers.current.push(
+          setTimeout(() => {
+            setRevealed(index + 1);
+            if (liveRef.current) setCurrentIndex(index);
+            if (index === sequence.length - 1) setIsRunning(false);
+          }, at),
+        );
+      }
+    },
+    [clearTimers],
+  );
 
   // Build also sends the specification to the real worker. Fire and forget: the
   // scripted run above never waits on Atlas, so a missing worker can't stall the demo.
   const [requestId, setRequestId] = useState<string | null>(null);
   const [requestNote, setRequestNote] = useState<string | null>(null);
   const build = useCallback(() => {
-    runDemo();
+    // The scripted walkthrough starts at once so the screen is never dead
+    // while the worker thinks; the real board replaces it when it lands.
+    setSource(SCRIPTED);
+    play(DEMO_SNAPSHOTS);
     setRequestId(null);
     setRequestNote(null);
     fetch("/api/spec", {
@@ -113,7 +130,39 @@ export function RippleDashboard() {
         else setRequestNote(`Real build not sent: ${json?.error ?? r.statusText}`);
       })
       .catch(() => setRequestNote("Real build not sent: the server is unreachable"));
-  }, [runDemo, prompt]);
+  }, [play, prompt]);
+
+  /**
+   * The worker finished the specification that was submitted. Swap the
+   * scripted walkthrough for the board it actually produced — same scene,
+   * real parts, real traces, real verdict.
+   */
+  const showRealBoard = useCallback(
+    async (boardId: string) => {
+      const payload = await getJson<RealBoardPayload & { error?: string }>(
+        `/api/boards/${encodeURIComponent(boardId)}`,
+      );
+      if (!payload || payload.error || !payload.pcb?.components?.length) return;
+
+      const runs =
+        (await getJson<{ runs?: RunDoc[] }>(
+          `/api/runs?board_id=${encodeURIComponent(boardId)}&limit=50`,
+        ))?.runs ?? [];
+
+      setSource({
+        kind: "real",
+        label: `real build · ${boardId.slice(0, 8)}`,
+      });
+      play(
+        buildSnapshotsFromBoard({
+          spec: { _id: payload.board.spec_id ?? "free text", text: prompt },
+          payload,
+          runs,
+        }),
+      );
+    },
+    [play, prompt],
+  );
 
   const reset = useCallback(() => {
     clearTimers();
@@ -124,6 +173,8 @@ export function RippleDashboard() {
     setCurrentIndex(-1);
     setSelected(null);
     setShowDeliverables(false);
+    setSnapshots(DEMO_SNAPSHOTS);
+    setSource(SCRIPTED);
   }, [clearTimers]);
 
   const scrubTo = useCallback((index: number) => {
@@ -144,19 +195,30 @@ export function RippleDashboard() {
   // for headless screenshots. Kicked off from a timer so no state is set
   // synchronously inside the effect.
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("autoplay") !== "1") return;
-    const kickoff = setTimeout(runDemo, 400);
-    return () => clearTimeout(kickoff);
-  }, [runDemo]);
+    const params = new URLSearchParams(window.location.search);
 
-  const current = currentIndex >= 0 ? SNAPSHOTS[currentIndex] : null;
+    // ?board=<id> replays a board Ripple already built, in the main view.
+    // Useful for the demo, and the only way to exercise the real-replay path
+    // without waiting on the worker.
+    const board = params.get("board");
+    if (board) {
+      const kickoff = setTimeout(() => void showRealBoard(board), 300);
+      return () => clearTimeout(kickoff);
+    }
+
+    if (params.get("autoplay") !== "1") return;
+    const kickoff = setTimeout(() => void build(), 400);
+    return () => clearTimeout(kickoff);
+  }, [build, showRealBoard]);
+
+  const current = currentIndex >= 0 ? (snapshots[currentIndex] ?? null) : null;
   const pcb = current?.pcb ?? EMPTY_PCB;
 
   const diff = useMemo(() => {
     const previous =
-      currentIndex > 0 ? SNAPSHOTS[currentIndex - 1].pcb : EMPTY_PCB;
+      currentIndex > 0 ? (snapshots[currentIndex - 1]?.pcb ?? EMPTY_PCB) : EMPTY_PCB;
     return diffPCBStates(previous, pcb);
-  }, [currentIndex, pcb]);
+  }, [currentIndex, pcb, snapshots]);
 
   // Added parts animate by mounting; *changed* parts keep the same mesh, so the
   // diff is what tells the scene to re-highlight them.
@@ -166,13 +228,13 @@ export function RippleDashboard() {
   );
 
   const history = useMemo(
-    () => SNAPSHOTS.slice(0, isLive ? revealed : currentIndex + 1),
-    [isLive, revealed, currentIndex],
+    () => snapshots.slice(0, isLive ? revealed : currentIndex + 1),
+    [isLive, revealed, currentIndex, snapshots],
   );
 
   const revealedSnapshots = useMemo(
-    () => SNAPSHOTS.slice(0, revealed),
-    [revealed],
+    () => snapshots.slice(0, revealed),
+    [revealed, snapshots],
   );
 
   const metrics = useMemo(() => deriveMetrics(pcb, current), [pcb, current]);
@@ -190,7 +252,7 @@ export function RippleDashboard() {
   const failing = current?.status === "error";
   const repairing = current?.stage === "repair" && !complete;
   const checkFailed = history.some((s) => s.status === "error");
-  const progress = revealed === 0 ? 0 : (currentIndex + 1) / SNAPSHOTS.length;
+  const progress = revealed === 0 ? 0 : (currentIndex + 1) / snapshots.length;
 
   const status = systemStatus({
     started: revealed > 0,
@@ -248,8 +310,19 @@ export function RippleDashboard() {
               <WorldHud
                 snapshot={current}
                 progress={progress}
-                totalSteps={SNAPSHOTS.length}
+                totalSteps={snapshots.length}
               />
+              {/* Say plainly which of the two the viewer is looking at. */}
+              <div className="mt-2.5 text-[11px]">
+                <span
+                  className={source.kind === "real" ? "text-good" : "text-ghost"}
+                >
+                  {source.kind === "real" ? "● " : "○ "}
+                </span>
+                <span className={source.kind === "real" ? "text-dim" : "text-ghost"}>
+                  {source.label}
+                </span>
+              </div>
             </div>
           ) : (
             <div className="pointer-events-none absolute left-6 top-5 max-w-[20rem]">
@@ -321,7 +394,11 @@ export function RippleDashboard() {
               isRunning={isRunning}
               hasRun={revealed > 0}
             />
-            <RealBuildStatus requestId={requestId} note={requestNote} />
+            <RealBuildStatus
+              requestId={requestId}
+              note={requestNote}
+              onBoard={(id) => void showRealBoard(id)}
+            />
           </div>
 
           {revealed > 0 ? (
