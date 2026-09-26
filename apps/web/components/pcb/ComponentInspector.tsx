@@ -30,7 +30,7 @@ export function ComponentInspector({
         <button
           type="button"
           onClick={onClose}
-          className="ml-auto text-[12px] text-ghost hover:text-ink"
+          className="ml-auto text-[12px] text-dim hover:text-ink"
           aria-label="Close inspector"
         >
           ✕
@@ -41,8 +41,8 @@ export function ComponentInspector({
         <span className={status.ink}>{status.label}</span>
         {component.placedDuring ? (
           <>
-            <span className="text-ghost">·</span>
-            <span className="text-faint">placed in {component.placedDuring}</span>
+            <span className="text-faint">·</span>
+            <span className="text-dim">placed in {component.placedDuring}</span>
           </>
         ) : null}
       </div>

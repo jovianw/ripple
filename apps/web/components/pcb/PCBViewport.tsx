@@ -11,7 +11,7 @@ const PCBScene = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-full items-center justify-center text-xs text-white/40">
+      <div className="flex h-full items-center justify-center text-xs text-white/75">
         Initialising renderer…
       </div>
     ),
@@ -32,8 +32,8 @@ class SceneBoundary extends Component<
     if (this.state.failed) {
       return (
         <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
-          <p className="text-sm text-white/70">3D view unavailable</p>
-          <p className="max-w-sm text-xs text-white/40">
+          <p className="text-sm text-white/85">3D view unavailable</p>
+          <p className="max-w-sm text-xs text-white/75">
             This browser could not start WebGL. The build log and stage progress
             on the right still work.
           </p>

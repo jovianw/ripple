@@ -135,7 +135,7 @@ export function RealBoardView({ boardId }: { boardId: string }) {
               <div className="text-[20px] font-medium leading-tight text-bad">
                 Could not load board
               </div>
-              <div className="mt-1.5 text-[12px] text-faint">{error}</div>
+              <div className="mt-1.5 text-[12px] text-dim">{error}</div>
             </>
           ) : !data ? (
             <div className="text-[20px] font-medium leading-tight text-dim">
@@ -154,11 +154,11 @@ export function RealBoardView({ boardId }: { boardId: string }) {
                     } failed`
                   : "All hidden checks passed"}
               </div>
-              <div className="mt-1.5 flex flex-wrap items-baseline gap-2 text-[12px] text-faint">
+              <div className="mt-1.5 flex flex-wrap items-baseline gap-2 text-[12px] text-dim">
                 <span className="font-mono">{meta?.board_id.slice(0, 8)}</span>
-                <span className="text-ghost">·</span>
+                <span className="text-faint">·</span>
                 <span>{meta?.kind}</span>
-                <span className="text-ghost">·</span>
+                <span className="text-faint">·</span>
                 <span>{ago(meta?.created_at)}</span>
               </div>
 
@@ -167,11 +167,11 @@ export function RealBoardView({ boardId }: { boardId: string }) {
                   {meta.failures.slice(0, 4).map((f, i) => (
                     <li key={`${f.check}-${i}`} className="text-[12px] leading-snug">
                       <span className="font-mono text-bad">{f.check}</span>
-                      <span className="text-faint"> — {f.detail}</span>
+                      <span className="text-dim"> — {f.detail}</span>
                     </li>
                   ))}
                   {meta.failures.length > 4 ? (
-                    <li className="text-[11px] text-ghost">
+                    <li className="text-[11px] text-dim">
                       +{meta.failures.length - 4} more
                     </li>
                   ) : null}

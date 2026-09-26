@@ -315,11 +315,11 @@ export function RippleDashboard() {
               {/* Say plainly which of the two the viewer is looking at. */}
               <div className="mt-2.5 text-[11px]">
                 <span
-                  className={source.kind === "real" ? "text-good" : "text-ghost"}
+                  className={source.kind === "real" ? "text-good" : "text-dim"}
                 >
                   {source.kind === "real" ? "● " : "○ "}
                 </span>
-                <span className={source.kind === "real" ? "text-dim" : "text-ghost"}>
+                <span className={source.kind === "real" ? "text-ink" : "text-dim"}>
                   {source.label}
                 </span>
               </div>
@@ -329,7 +329,7 @@ export function RippleDashboard() {
               <div className="text-[20px] font-medium leading-tight text-dim">
                 Idle
               </div>
-              <div className="mt-1.5 text-[12px] text-ghost">
+              <div className="mt-1.5 text-[12px] text-dim">
                 Describe a board to begin synthesis.
               </div>
             </div>
@@ -338,7 +338,7 @@ export function RippleDashboard() {
           {!isLive ? (
             <div className="pointer-events-none absolute right-6 top-5 text-right">
               <div className="text-[12px] text-warn">Viewing history</div>
-              <div className="font-mono text-[11px] text-faint">
+              <div className="font-mono text-[11px] text-dim">
                 {currentIndex + 1} / {revealed}
               </div>
             </div>

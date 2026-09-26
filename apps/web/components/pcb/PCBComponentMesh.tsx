@@ -160,7 +160,7 @@ export function PCBComponentMesh({
             >
               {component.label}
             </div>
-            <div className="mt-[3px] text-[8px] uppercase tracking-[0.16em] text-white/40">
+            <div className="mt-[3px] text-[8px] uppercase tracking-[0.16em] text-white/75">
               {component.shortName ?? component.part ?? component.type}
             </div>
           </div>
