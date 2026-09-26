@@ -13,6 +13,7 @@ import { expected as h01 } from "./h01_usbc_humidity_node.ts"
 import { expected as h02 } from "./h02_mcu_temp_logger.ts"
 import { expected as h03 } from "./h03_rc_lowpass.ts"
 import { expected as h04 } from "./h04_dual_led_driver.ts"
+import { expected as finale } from "./finale.ts"
 
 const registry: Record<string, ExpectedChecks> = {
   "led-board": ledBoard,
@@ -28,6 +29,7 @@ const registry: Record<string, ExpectedChecks> = {
   h02_mcu_temp_logger: h02,
   h03_rc_lowpass: h03,
   h04_dual_led_driver: h04,
+  finale,
 }
 
 export function loadExpected(specId: string): ExpectedChecks {

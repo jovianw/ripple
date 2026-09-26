@@ -88,7 +88,7 @@ await check("voyage", async () => {
 });
 
 await check("models", async () => {
-  const [key, project] = env("OPENROUTER_API_KEY", "LANGSMITH_API_KEY", "LANGSMITH_PROJECT");
+  const [key, , project] = env("OPENROUTER_API_KEY", "LANGSMITH_API_KEY", "LANGSMITH_PROJECT");
   if (process.env.LANGSMITH_TRACING !== "true") throw new Error("set LANGSMITH_TRACING=true or no traces are sent");
   // Cheap model only: the team shares a $100 OpenRouter budget.
   const model = process.env.OPENROUTER_CHECK_MODEL || "google/gemini-3.8-flash";

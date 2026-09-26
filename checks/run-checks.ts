@@ -44,5 +44,10 @@ export async function runChecks(
   ];
   const drc = await checkDrc(json, expected);
   failures.push(...drc.failures);
+  // A part can match several rules (the SHT40 is both a temp and a humidity sensor); report each problem once.
+  const seen = new Set<string>();
+  const unique = failures.filter((f) => { const k = `${f.check}|${f.detail}`; if (seen.has(k)) return false; seen.add(k); return true; });
+  failures.length = 0;
+  failures.push(...unique);
   return { ...base, passed: failures.length === 0, failures, drc_errors: drc.drc_errors };
 }
