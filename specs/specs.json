@@ -1,0 +1,62 @@
+[
+  {
+    "_id": "t01_led_indicator",
+    "split": "train",
+    "text": "A small board powered from a 2-pin 5V header that lights a red indicator LED at about 3 mA."
+  },
+  {
+    "_id": "t02_usbc_power_led",
+    "split": "train",
+    "text": "A USB-C power input board that exposes 5V and GND on a 2-pin header and has a green power LED."
+  },
+  {
+    "_id": "t03_ldo_3v3",
+    "split": "train",
+    "text": "A board that takes 5V from USB-C and regulates it to 3.3V with a linear regulator. Break out 3.3V and GND on a 2-pin header and add a power LED on the 3.3V rail."
+  },
+  {
+    "_id": "t04_i2c_temp_breakout",
+    "split": "train",
+    "text": "A breakout for an I2C temperature sensor. Power it at 3.3V from a 4-pin header (3V3, GND, SDA, SCL)."
+  },
+  {
+    "_id": "t05_divider_12v_adc",
+    "split": "train",
+    "text": "A voltage divider that scales a 12V input down to about 3.0V for a microcontroller ADC. Input on a 2-pin header, output and ground on another 2-pin header."
+  },
+  {
+    "_id": "t06_button_debounced",
+    "split": "train",
+    "text": "A pushbutton input for a 3.3V microcontroller. The output is high when released and low when pressed, with RC debouncing. Connect 3V3, GND, and the button signal on a 3-pin header."
+  },
+  {
+    "_id": "t07_mcu_blinky",
+    "split": "train",
+    "text": "A minimal 3.3V microcontroller board powered from a 2-pin header, with a status LED on one GPIO and a 6-pin programming header."
+  },
+  {
+    "_id": "t08_i2c_two_devices",
+    "split": "train",
+    "text": "A board with an I2C temperature sensor and an I2C EEPROM on the same bus, powered at 3.3V from a 4-pin header (3V3, GND, SDA, SCL)."
+  },
+  {
+    "_id": "h01_usbc_humidity_node",
+    "split": "held_out",
+    "text": "A board that reads a humidity sensor over I2C, powered from USB-C through a 3.3V regulator, with a power LED. Break out SDA, SCL, 3V3, and GND on a 4-pin header."
+  },
+  {
+    "_id": "h02_mcu_temp_logger",
+    "split": "held_out",
+    "text": "A 3.3V microcontroller that reads an I2C temperature sensor and has a status LED. Power comes from a 2-pin header."
+  },
+  {
+    "_id": "h03_rc_lowpass",
+    "split": "held_out",
+    "text": "A first-order RC low-pass filter with a cutoff near 1 kHz on an analog signal. Signal in and ground on one 2-pin header, filtered output and ground on another."
+  },
+  {
+    "_id": "h04_dual_led_driver",
+    "split": "held_out",
+    "text": "A board powered from 5V with a power LED and two indicator LEDs, each switched by its own pin on a 4-pin header (5V, GND, LED_A, LED_B)."
+  }
+]
