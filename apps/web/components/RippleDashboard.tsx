@@ -211,8 +211,8 @@ export function RippleDashboard() {
           </span>
           <nav className="flex items-baseline gap-3 text-[12px]">
             <span className="text-ink">Board</span>
-            <Link href="/live" className="text-faint hover:text-ink">
-              Live
+            <Link href="/system" className="text-faint hover:text-ink">
+              System
             </Link>
             <Link href="/harness" className="text-faint hover:text-ink">
               Harness

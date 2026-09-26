@@ -116,13 +116,21 @@ from route handlers only, never the browser, and never import
 | `GET /api/memory` | active lessons and reusable subcircuits |
 | `GET /api/queue?board_id=` | work items, with `stale` computed for dead workers |
 
-`/live` renders all of it, polling every 2s — serverless functions can't hold a
+Three pages consume these:
+
+| Page | Job |
+|---|---|
+| `/` | the scripted demo — never touches Atlas |
+| `/system` | system index: connection, counts, boards, lessons, subcircuit library |
+| `/harness` | one board's execution, interpreted — design loop, timeline, inspector |
+
+Polling every 2s via `lib/usePolling.ts`; serverless functions can't hold a
 change stream open. Embeddings are projected out of every response.
 
 **Environment:** `MONGODB_URI_READER` and `MONGODB_DB` locally in
 `apps/web/.env.local` (gitignored), and in the Vercel project's environment
-variables for deploys. Without them `/live` reports "Disconnected" and the
-routes return 503 rather than crashing the page.
+variables for deploys. Without them the Atlas pages report "Disconnected" and
+the routes return 503 rather than crashing the page.
 
 `/` does not touch Atlas: it stays on scripted snapshots so the demo cannot be
 broken by the database.
@@ -168,4 +176,4 @@ latency. So the page:
 `actorConfidence` is `"explicit" | "derived"`, and an `agent` field on a run is
 preferred automatically the moment the worker starts writing one.
 
-Polling is shared with `/live` through `lib/usePolling.ts`.
+Polling is shared with `/system` through `lib/usePolling.ts`.

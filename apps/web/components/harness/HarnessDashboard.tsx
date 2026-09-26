@@ -144,8 +144,8 @@ export function HarnessDashboard() {
             <Link href="/" className="text-faint hover:text-ink">
               Board
             </Link>
-            <Link href="/live" className="text-faint hover:text-ink">
-              Live
+            <Link href="/system" className="text-faint hover:text-ink">
+              System
             </Link>
             <span className="text-ink">Harness</span>
           </nav>

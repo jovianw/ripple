@@ -65,8 +65,8 @@ export function RealBuildStatus({ requestId, note }: { requestId: string | null;
           open board
         </Link>
       ) : null}
-      <Link href="/live" className="text-ghost hover:text-accent">
-        live
+      <Link href="/system" className="text-ghost hover:text-accent">
+        system
       </Link>
     </p>
   );

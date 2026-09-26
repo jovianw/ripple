@@ -62,6 +62,16 @@ export interface QueueItemDoc {
   stale?: boolean;
 }
 
+export interface BoardSummary {
+  board_id: string;
+  spec_id?: string;
+  kind?: string;
+  harness_version?: number;
+  passed?: boolean;
+  failures?: unknown[];
+  created_at?: string;
+}
+
 export interface Health {
   connected: boolean;
   configured: boolean;

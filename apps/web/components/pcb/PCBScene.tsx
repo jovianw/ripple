@@ -123,16 +123,16 @@ export function PCBScene({
 
       {/* Low ambient so the key light does the shaping and the board keeps
           its contrast against the dark surround. */}
-      <ambientLight intensity={0.34} />
+      <ambientLight intensity={0.6} />
       <directionalLight
         position={[5.5, 11, 7]}
-        intensity={1.55}
+        intensity={2.1}
         castShadow
         shadow-mapSize={[1024, 1024]}
         shadow-bias={-0.0004}
       />
       {/* Cool rim from behind, to separate the board edge from the backdrop. */}
-      <directionalLight position={[-7, 4.5, -8]} intensity={0.5} color="#6fb3d8" />
+      <directionalLight position={[-7, 4.5, -8]} intensity={0.7} color="#6fb3d8" />
 
       <PCBBoard width={pcb.board.width} height={pcb.board.height} />
 

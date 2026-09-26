@@ -80,7 +80,7 @@ export function RealBoardView({ boardId }: { boardId: string }) {
       <header className="flex h-12 shrink-0 items-center justify-between px-6">
         <div className="flex items-baseline gap-2.5">
           <Link
-            href="/live"
+            href="/system"
             className="text-[15px] font-medium tracking-[0.08em] text-ink hover:text-accent"
           >
             Ripple
