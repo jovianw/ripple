@@ -64,7 +64,8 @@ async function loadAll(boardId: string | null): Promise<Snapshot> {
     versions: harness?.versions ?? [],
     lessons: memory?.lessons ?? [],
     subcircuits: memory?.subcircuits ?? [],
-    boardIds: (boards?.boards ?? []).map((b) => b.board_id),
+    // /api/boards lists board documents (one per attempt, subcircuit and assembly), so the same id repeats.
+    boardIds: [...new Set((boards?.boards ?? []).map((b) => b.board_id))],
     connected: health?.connected === true,
   };
 }
