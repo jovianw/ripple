@@ -27,7 +27,7 @@ Per-person task list and timings: DESIGN.md §6.
 - **Parts come from the whitelist.** The coder may only use parts in `parts/whitelist.json` (agent-visible). Add a part only if `npm run verify:parts` passes.
 - **One writer.** Only the worker writes to Atlas. The web app and MCP server use `MONGODB_URI_READER`.
 - **No secrets in git.** Keys live in `.env` (gitignored). Never commit `.env`, `.mcp.json`, or API keys; share keys privately.
-- **Watch OpenRouter spend.** Shared budget is $100 for the day. Log cost per call; use cheap models while developing.
+- **Watch OpenRouter spend.** Each person uses their own OpenRouter key, and each key has a small budget (around $10). Use the cheap model (e.g. `google/gemini-3.8-flash`) for development, tests and the coder; strong models only for the planner, meta-agent and demo runs. Always set `max_tokens`. Log cost per call.
 - **Pin tscircuit.** `tscircuit@0.0.2646` (exact). Don't upgrade it.
 - **Ignore install warnings.** `npm install` prints peer-dependency warnings and audit findings from inside tscircuit's own packages. They're expected. Never run `npm audit fix` or `--force`; it breaks the pinned versions.
 
