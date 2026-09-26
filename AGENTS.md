@@ -28,6 +28,7 @@ Per-person task list and timings: DESIGN.md §6.
 - **No secrets in git.** Keys live in `.env` (gitignored). Never commit `.env`, `.mcp.json`, or API keys; share keys privately.
 - **Watch OpenRouter spend.** Shared budget is $100 for the day. Log cost per call; use cheap models while developing.
 - **Pin tscircuit.** `tscircuit@0.0.2646` (exact). Don't upgrade it.
+- **Ignore install warnings.** `npm install` prints peer-dependency warnings and audit findings from inside tscircuit's own packages. They're expected. Never run `npm audit fix` or `--force`; it breaks the pinned versions.
 
 ## Branches
 
