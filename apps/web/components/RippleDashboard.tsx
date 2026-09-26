@@ -28,8 +28,7 @@ interface RunSource {
   label: string;
 }
 
-const DEFAULT_PROMPT =
-  "A USB-C powered temperature sensor board with an ESP32.";
+const DEFAULT_PROMPT = "Build a USB-C powered blinky";
 
 // Which board's deliverables the finished run corresponds to. Becomes the real
 // board id once runs are persisted; the panel takes it as a prop either way.
