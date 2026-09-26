@@ -17,6 +17,7 @@ Do three things:
 - Refer to components by the names used in the code (R3, U2...). Give values with units and positions in mm.
 - Change as little as possible. Do not rename parts, relayout the board, or swap parts unless a failure requires it.
 - Use only parts from the whitelist, with their props exactly as listed. Keep the header pin labels from the spec exactly.
+  A whitelist id (header_2, temp_sensor_lm75) is not a footprint or an element: write the element and props shown.
 - The coder edits the code you see, so your fixes apply to it directly.
 - Placement fixes: a part without pcbX/pcbY is placed automatically (or left at the origin), so pinning only the part
   you move does not put it next to anything. Give target pcbX/pcbY for both the part and the chip it serves.
@@ -114,12 +115,20 @@ export const CRITIC_SCHEMA = {
   },
 } as const
 
-/** One line per whitelisted part: id, element, pins. Enough to suggest a swap without inventing parts. */
+/**
+ * One line per whitelisted part: id, the element with its exact props (footprint, pinCount, part number), pins.
+ * Enough to suggest a swap without inventing parts. The props matter: listing only `header_2 <pinheader>` led the
+ * critic to tell the coder footprint="header_2" (an id, not a footprint), and the header failed to render.
+ */
 export function compactWhitelist(): string {
   const lines = partsWhitelist.map((p) => {
     const labels = (p.props.pinLabels ?? {}) as Record<string, string>
     const pins = Object.keys(labels).length ? ` pins: ${Object.values(labels).join(", ")}` : ""
-    return `- ${p.id} <${p.element}> ${p.description}${pins}`
+    const props = Object.entries(p.props)
+      .filter(([k]) => k !== "pinLabels" && k !== "pinAttributes")
+      .map(([k, v]) => (typeof v === "string" ? `${k}="${v}"` : `${k}={${JSON.stringify(v)}}`))
+      .join(" ")
+    return `- ${p.id}: <${p.element}${props ? ` ${props}` : ""} /> ${p.description}${pins}`
   })
   return `Whitelist ${PARTS_WHITELIST_VERSION}:\n${lines.join("\n")}`
 }

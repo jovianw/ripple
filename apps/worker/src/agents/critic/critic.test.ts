@@ -2,10 +2,10 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { evaluateCircuitSource } from "../../tools/evaluate.js"
-import { keepPlacement, normalizeCoderSource } from "../../tools/normalize.js"
+import { keepPlacement, normalizeCoderSource, validPinLabel } from "../../tools/normalize.js"
 import { describeLayout } from "./layout.js"
 import { settlePlacement } from "../../tools/placement.js"
-import { criticUserPrompt } from "./prompt.js"
+import { compactWhitelist, criticUserPrompt } from "./prompt.js"
 
 const BOARD = `export default () => (
   <board>
@@ -116,4 +116,37 @@ test("settlePlacement changes nothing when the repair moved no part", async () =
   const cj = (await evaluateCircuitSource(normalizeCoderSource(BOARD))).circuitJson
   const pinned = BOARD.replace(`<capacitor name="C1"`, `<capacitor name="C1" pcbX={3} pcbY={-4}`)
   assert.equal(settlePlacement(pinned, cj, pinned), pinned)
+})
+
+test("validPinLabel turns labels tscircuit rejects into ones it accepts", () => {
+  assert.equal(validPinLabel("3.3V"), "3V3")
+  assert.equal(validPinLabel("1.8V"), "1V8")
+  assert.equal(validPinLabel("+5V"), "5V")
+  assert.equal(validPinLabel("5 V"), "5V")
+  assert.equal(validPinLabel("VCC-3"), "VCC_3")
+  assert.equal(validPinLabel("3V3"), "3V3")
+  assert.equal(validPinLabel("GND"), "GND")
+})
+
+test("a header labelled from the spec's wording (\"3.3V\") renders after normalizing, traces included", async () => {
+  const code = `export default () => (
+  <board>
+    <pinheader name="HEADER" pinCount={2} footprint="pinrow2" pinLabels={["3.3V", "GND"]} />
+    <resistor name="R1" resistance="1k" footprint="0603" />
+    <trace from=".HEADER > .3.3V" to=".R1 > .pin1" />
+    <trace from=".HEADER > .GND" to=".R1 > .pin2" />
+  </board>
+)`
+  const failed = (cj: unknown) => (cj as { type: string }[]).filter((e) => /source_failed|source_trace_not_connected/.test(e.type))
+  assert.ok(failed((await evaluateCircuitSource(code)).circuitJson).length > 0, "tscircuit rejects 3.3V")
+  const fixed = normalizeCoderSource(code)
+  assert.match(fixed, /pinLabels=\{\["3V3", "GND"\]\}/)
+  assert.match(fixed, /from="\.HEADER > \.3V3"/)
+  assert.deepEqual(failed((await evaluateCircuitSource(fixed)).circuitJson), [])
+})
+
+test("the critic's parts list shows each part's exact element and props", () => {
+  const list = compactWhitelist()
+  assert.match(list, /- header_2: <pinheader pinCount=\{2\} footprint="pinrow2" \/>/)
+  assert.match(list, /- temp_sensor_lm75: <chip manufacturerPartNumber="LM75B" footprint="soic8" \/>.* pins: SDA, SCL/)
 })

@@ -8,9 +8,10 @@
  *   maximum trace automatically, so each capacitor gets an explicit, generous maxDecouplingTraceLength; coder-set
  *   maxLength/decouplingFor/decouplingTo are removed. The hidden checks still enforce the 3mm placement rule.
  * - ".R1.pin2" selectors -> ".R1 > .pin2"; numeric pinLabels keys ("1") -> "pin1"; pcbX={{12}} -> pcbX={12}.
+ * - pin labels tscircuit rejects ("3.3V", "+5V") -> ones it accepts ("3V3", "5V"); see validPinLabels.
  */
 export function normalizeCoderSource(source: string): string {
-  return source
+  return validPinLabels(source)
     .replace(/\s+(?:maxLength|maxDecouplingTraceLength|decouplingFor|decouplingTo)=(?:"[^"]*"|'[^']*'|\{[^}]*\})/g, "")
     .replace(/<capacitor\b/g, "<capacitor maxDecouplingTraceLength={1000}")
     // pcbX={{12}} (a coder copying JSX from fix text) doesn't compile: one pair of braces.
@@ -19,6 +20,47 @@ export function normalizeCoderSource(source: string): string {
     // pinLabels={{"1":"MISO"}} -> pinLabels={{"pin1":"MISO"}}: tscircuit ignores numeric keys.
     .replace(/pinLabels=\{\{([^}]*)\}\}/g, (_m, body: string) =>
       `pinLabels={{${body.replace(/(^|[{,]\s*)["']?(\d+)["']?\s*:/g, '$1"pin$2":')}}}`)
+}
+
+/** A pin label tscircuit accepts: letters, digits and "_" only. "3.3V" -> "3V3", "1.8V" -> "1V8", "+5V" -> "5V". */
+export function validPinLabel(label: string): string {
+  if (/^\w+$/.test(label)) return label
+  const fixed = label
+    .trim()
+    .replace(/^(\d+)\.(\d+)\s*V$/i, "$1V$2")
+    .replace(/^(\d+)\s+V$/i, "$1V")
+    .replace(/^\+/, "")
+    .replace(/\W+/g, "_")
+    .replace(/^_+|_+$/g, "")
+  return fixed || "PIN"
+}
+
+/**
+ * The spec's wording ends up in pinLabels ("Break out 3.3V and GND"), and tscircuit then refuses to create the part:
+ * nothing can connect to it and the whole board fails. Renames each rejected label, and the trace selectors that
+ * use it (".J1 > .3.3V").
+ */
+export function validPinLabels(source: string): string {
+  let out = source
+  for (const tag of source.match(/<[A-Za-z]+\b[^>]*?\bpinLabels=\{[\s\S]*?\}\}?[^>]*>/g) ?? []) {
+    const name = tag.match(/\bname=["']([^"']+)["']/)?.[1]
+    const renamed = new Map<string, string>()
+    const fixedTag = tag.replace(/(pinLabels=\{)(\[[^\]]*\]|\{[^}]*\})(\})/, (_m, open: string, body: string, close: string) =>
+      open +
+      body.replace(/(["'])([^"']*)\1(\s*[,\]}])/g, (lit, q: string, label: string, after: string) => {
+        const valid = validPinLabel(label)
+        if (valid === label) return lit
+        renamed.set(label, valid)
+        return `${q}${valid}${q}${after}`
+      }) +
+      close)
+    if (!renamed.size) continue
+    out = out.replace(tag, fixedTag)
+    if (!name) continue
+    for (const [from, to] of renamed)
+      out = out.replace(new RegExp(`(\\.${esc(name)}\\s*>\\s*\\.)${esc(from)}(["'])`, "g"), `$1${to}$2`)
+  }
+  return out
 }
 
 /** The same code with the coder's positions removed, so tscircuit places the parts itself (no overlaps). */
