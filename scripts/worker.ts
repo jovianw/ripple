@@ -28,10 +28,11 @@ const { runPlannedBoard } = (await load("../apps/worker/src/pipeline/planned-boa
   runPlannedBoard: (boardId: string, spec: { _id: string; text: string }, config: HarnessConfig, deps: unknown) =>
     Promise<{ final: { passed?: boolean } | null; progress: { done: number; total: number } }>;
 };
-const { createComplete } = (await load("../apps/worker/src/tools/router.ts")) as {
-  createComplete: (role: "planner", config: HarnessConfig) => unknown;
+// Marcos's live deps for planned boards: planner via the router, coder, lessons per subcircuit, critic repair rounds.
+// Same as `npm run finale`, so a finale started from the web behaves exactly like the CLI.
+const { liveDeps } = (await load("../apps/worker/src/pipeline/live-deps.ts")) as {
+  liveDeps: (spec: { _id: string; text: string }, boardId: string, config: HarnessConfig, log?: (m: string) => void) => unknown;
 };
-const { runCoder } = (await load("../apps/worker/src/agents/coder.ts")) as { runCoder: (input: unknown) => Promise<unknown> };
 const checks = (await load("../checks/index.ts")) as { genericExpected?: (circuitJson: unknown) => unknown };
 // Free text has no hidden-check file. Generic checks come from the board itself; until Marcos's lands, DRC only
 // (runChecks always runs DRC).
@@ -70,8 +71,7 @@ await serveRequests(
     if (req.spec_id === finaleSpec._id) {
       const boardId = `finale-req-${String(req._id).slice(-6)}`;
       await setBoard(boardId, config.version);
-      const deps = { planner: { complete: createComplete("planner", config) }, coder: runCoder, log };
-      const { final, progress } = await runPlannedBoard(boardId, finaleSpec, config, deps);
+      const { final, progress } = await runPlannedBoard(boardId, finaleSpec, config, liveDeps(finaleSpec, boardId, config, log));
       return { passed: !!final?.passed, attempts: progress.done };
     }
 
