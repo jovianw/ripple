@@ -3,7 +3,7 @@
 import { test, describe, before } from "node:test"
 import assert from "node:assert/strict"
 import type { AnyCircuitElement } from "circuit-json"
-import { runChecks } from "./index.ts"
+import { runChecks, appliedChecks, checkScore } from "./index.ts"
 import type { ExpectedChecks } from "./expected.ts"
 import { renderBoard } from "./fixtures/render.tsx"
 import { LedBoard, LedBoardMissingTrace } from "./fixtures/led-board.tsx"
@@ -153,5 +153,29 @@ describe("I2C board", () => {
     assert.equal(r.passed, false)
     assert.ok(failureChecks(r).includes("separate"))
     assert.match(detailsOf(r, "separate").join("\n"), /VCC.*GND|GND.*VCC/)
+  })
+})
+
+describe("checkScore (partial credit)", () => {
+  test("applies only the categories the spec grades, plus drc", () => {
+    assert.deepEqual(appliedChecks(ledExpected), ["connectivity", "separate", "drc"])
+    assert.deepEqual(appliedChecks(i2cExpected), ["connectivity", "separate", "pullups", "decoupling", "drc"])
+  })
+
+  test("a passing board scores 1; one broken category scores (n-1)/n", async () => {
+    const good = await runChecks(await renderBoard(I2cBoard), i2cExpected)
+    assert.equal(checkScore(good, i2cExpected), 1)
+    const broken = await runChecks(await renderBoard(() => <I2cBoard noSclPullup />), i2cExpected)
+    // drc can pick up autorouter noise on a re-render; score the netlist failure only.
+    const netlistOnly = { failures: broken.failures.filter((f) => f.check !== "drc") }
+    assert.equal(checkScore(netlistOnly, i2cExpected), 4 / 5)
+  })
+
+  test("unreadable input scores 0", () => {
+    assert.equal(checkScore({ failures: [{ check: "input", detail: "x" }] }, ledExpected), 0)
+  })
+
+  test("throws on a failure from a category the spec doesn't apply", () => {
+    assert.throws(() => checkScore({ failures: [{ check: "pullups", detail: "x" }] }, ledExpected), /pullups/)
   })
 })

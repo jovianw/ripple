@@ -1,12 +1,13 @@
 {
   "version": "v2",
   "tscircuit": "0.0.2646",
-  "about": "Parts the coder may use. Spread props into the element: <chip name=\"U1\" {...part.props} />. roles and canonicalPins let checks refer to parts by function (e.g. any temp_sensor's VCC pin).",
+  "about": "Parts the coder may use. Spread props into the element: <chip name=\"U1\" {...part.props} />. roles and canonicalPins let checks refer to parts by function (e.g. any temp_sensor's VCC pin). unit_price_usd is an approximate LCSC small-quantity unit price, used to score BOM cost.",
   "parts": [
     {
       "id": "resistor_0402",
       "kind": "resistor",
       "element": "resistor",
+      "unit_price_usd": 0.002,
       "props": {
         "footprint": "0402"
       },
@@ -19,6 +20,7 @@
       "id": "resistor_0603",
       "kind": "resistor",
       "element": "resistor",
+      "unit_price_usd": 0.002,
       "props": {
         "footprint": "0603"
       },
@@ -31,6 +33,7 @@
       "id": "resistor_0805",
       "kind": "resistor",
       "element": "resistor",
+      "unit_price_usd": 0.003,
       "props": {
         "footprint": "0805"
       },
@@ -43,6 +46,7 @@
       "id": "capacitor_0402",
       "kind": "capacitor",
       "element": "capacitor",
+      "unit_price_usd": 0.002,
       "props": {
         "footprint": "0402"
       },
@@ -55,6 +59,7 @@
       "id": "capacitor_0603",
       "kind": "capacitor",
       "element": "capacitor",
+      "unit_price_usd": 0.003,
       "props": {
         "footprint": "0603"
       },
@@ -67,6 +72,7 @@
       "id": "capacitor_0805",
       "kind": "capacitor",
       "element": "capacitor",
+      "unit_price_usd": 0.005,
       "props": {
         "footprint": "0805"
       },
@@ -79,6 +85,7 @@
       "id": "capacitor_1206",
       "kind": "capacitor",
       "element": "capacitor",
+      "unit_price_usd": 0.02,
       "props": {
         "footprint": "1206"
       },
@@ -91,6 +98,7 @@
       "id": "led_0603",
       "kind": "led",
       "element": "led",
+      "unit_price_usd": 0.01,
       "props": {
         "footprint": "0603"
       },
@@ -104,6 +112,7 @@
       "id": "led_0805",
       "kind": "led",
       "element": "led",
+      "unit_price_usd": 0.012,
       "props": {
         "footprint": "0805"
       },
@@ -117,6 +126,7 @@
       "id": "diode_sod123",
       "kind": "diode",
       "element": "diode",
+      "unit_price_usd": 0.02,
       "props": {
         "footprint": "sod123"
       },
@@ -126,6 +136,7 @@
       "id": "pushbutton_smd",
       "kind": "switch",
       "element": "pushbutton",
+      "unit_price_usd": 0.05,
       "props": {
         "footprint": "pushbutton"
       },
@@ -136,6 +147,7 @@
       "id": "crystal_hc49",
       "kind": "crystal",
       "element": "crystal",
+      "unit_price_usd": 0.1,
       "props": {
         "footprint": "hc49",
         "loadCapacitance": "20pF"
@@ -149,6 +161,7 @@
       "id": "header_2",
       "kind": "connector",
       "element": "pinheader",
+      "unit_price_usd": 0.03,
       "props": {
         "pinCount": 2,
         "footprint": "pinrow2"
@@ -160,6 +173,7 @@
       "id": "header_3",
       "kind": "connector",
       "element": "pinheader",
+      "unit_price_usd": 0.04,
       "props": {
         "pinCount": 3,
         "footprint": "pinrow3"
@@ -171,6 +185,7 @@
       "id": "header_4",
       "kind": "connector",
       "element": "pinheader",
+      "unit_price_usd": 0.05,
       "props": {
         "pinCount": 4,
         "footprint": "pinrow4"
@@ -182,6 +197,7 @@
       "id": "header_6",
       "kind": "connector",
       "element": "pinheader",
+      "unit_price_usd": 0.07,
       "props": {
         "pinCount": 6,
         "footprint": "pinrow6"
@@ -193,6 +209,7 @@
       "id": "usb_c_receptacle",
       "kind": "connector",
       "element": "chip",
+      "unit_price_usd": 0.25,
       "roles": [
         "usb_c"
       ],
@@ -247,6 +264,7 @@
       "id": "ldo_3v3_ap2112k",
       "kind": "regulator",
       "element": "chip",
+      "unit_price_usd": 0.12,
       "roles": [
         "ldo_3v3"
       ],
@@ -289,6 +307,7 @@
       "id": "ldo_3v3_ams1117",
       "kind": "regulator",
       "element": "chip",
+      "unit_price_usd": 0.08,
       "roles": [
         "ldo_3v3"
       ],
@@ -326,6 +345,7 @@
       "id": "temp_sensor_lm75",
       "kind": "sensor",
       "element": "chip",
+      "unit_price_usd": 0.35,
       "roles": [
         "temp_sensor",
         "i2c_device"
@@ -368,6 +388,7 @@
       "id": "humidity_sensor_sht40",
       "kind": "sensor",
       "element": "chip",
+      "unit_price_usd": 1.6,
       "roles": [
         "humidity_sensor",
         "temp_sensor",
@@ -404,6 +425,7 @@
       "id": "env_sensor_bme280",
       "kind": "sensor",
       "element": "chip",
+      "unit_price_usd": 3.2,
       "roles": [
         "humidity_sensor",
         "temp_sensor",
@@ -454,6 +476,7 @@
       "id": "eeprom_24lc256",
       "kind": "memory",
       "element": "chip",
+      "unit_price_usd": 0.4,
       "roles": [
         "eeprom",
         "i2c_device"
@@ -497,6 +520,7 @@
       "id": "mcu_attiny85",
       "kind": "mcu",
       "element": "chip",
+      "unit_price_usd": 1.1,
       "roles": [
         "mcu"
       ],
@@ -539,6 +563,7 @@
       "id": "mcu_stm32f030",
       "kind": "mcu",
       "element": "chip",
+      "unit_price_usd": 0.9,
       "roles": [
         "mcu"
       ],

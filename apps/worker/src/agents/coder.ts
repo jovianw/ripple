@@ -9,7 +9,7 @@ import { keepPlacement, normalizeCoderSource } from "../tools/normalize.js";
 import { settlePlacement } from "../tools/placement.js";
 import { EvaluateError } from "../tools/evaluate.js";
 import { runDrc, type DrcResult } from "../tools/drc.js";
-import { computeMetrics, type CircuitMetrics } from "../tools/metrics.js";
+import { computeMetrics, MetricsError, type CircuitMetrics } from "../tools/metrics.js";
 import { partsWhitelistPrompt } from "../tools/parts-whitelist.js";
 
 export interface CoderInput {
@@ -171,7 +171,13 @@ export async function runCoder(input: CoderInput): Promise<CoderResult> {
     throw new CoderCompileError(`code did not compile or render: ${cause || err.message}`.slice(0, 500), source, model, { cause: err });
   }
   const drc = runDrc(circuitJson);
-  const metrics = computeMetrics(circuitJson);
+  let metrics: CircuitMetrics;
+  try {
+    metrics = computeMetrics(circuitJson);
+  } catch (err) {
+    if (!(err instanceof MetricsError)) throw err;
+    throw new CoderCompileError(err.message, source, model, { cause: err });
+  }
 
   return { source, circuitJson, drc, metrics, model };
 }

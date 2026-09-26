@@ -6,6 +6,7 @@ import { runAllChecks } from "@tscircuit/checks"
 import { convertCircuitJsonToPcbSvg } from "circuit-to-svg"
 import { LedBoard } from "../examples/led-board.tsx"
 import { referenceBoards } from "../checks/reference/index.ts"
+import { computeMetrics } from "../apps/worker/src/tools/metrics.ts"
 
 // Reference boards by full spec id or short prefix (t03, h01...).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,6 +31,11 @@ writeFileSync(`out/${name}.pcb.svg`, convertCircuitJsonToPcbSvg(json))
 
 console.log(`components: ${count("pcb_component")}, traces: ${count("pcb_trace")}, vias: ${count("pcb_via")}`)
 console.log(`render errors: ${renderErrors.length}, DRC errors: ${drcErrors.length}`)
+const m = computeMetrics(json)
+console.log(
+  `board: ${m.area_mm2.toFixed(0)} mm² (parts cover ${(m.density * 100).toFixed(0)}%), routing ${m.detour.toFixed(2)}x straight-line, ` +
+    `${m.connections} connections, ${m.parts} parts, BOM $${m.bom_usd.toFixed(2)}`,
+)
 for (const e of [...renderErrors, ...drcErrors]) console.log(" -", (e as { message?: string }).message ?? e.type)
 console.log(`wrote out/${name}.circuit.json, out/${name}.pcb.svg`)
 process.exit(renderErrors.length + drcErrors.length > 0 ? 1 : 0)

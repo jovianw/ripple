@@ -275,6 +275,7 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 - [x] **1:00–2:00** Work queue, transactions, idempotent runs, heartbeat, resume (`apps/worker/src/harness/queue.ts`: `enqueue`, `runQueue(boardId, handler)`, `complete`/`fail` in transactions; kill-and-resume verified with `npm run queue:demo`)
 - [x] **2:00–3:00** Config gate (keep, roll back, reject); change-stream triggers for critic and meta-agent (gate: `apps/worker/src/harness/gate.ts`, `scoreVersion` + `evaluatePending(runBatch)` + guardrails; `npm run evolve` runs batch → meta-agent → gate. Change streams: no worker triggers, since the loop calls the critic and evolve calls the meta-agent directly; used for the UI's live run feed, see `docs/frontend-backend.md`)
 - [ ] **3:00–3:30** Help run the finale board through the queue with kill-and-resume
+- [x] Graded scoring, not just pass/fail: partial credit per attempt (`checkScore`, share of the spec's hidden-check categories passed), board quality per compiled board (area, detour vs straight-line, vias, parts, BOM from whitelist unit prices; `tools/metrics.ts`), and a correctness-first gate that compares board quality spec by spec (`harness/quality.ts`, `isBetter`). The meta-agent, ablation table and harness view show the new numbers
 
 ### Arjun: agents, tools, models
 - [x] **10:30–11:30** Tool wrappers: compile, evaluate, DRC, metrics → `CircuitJson` (`apps/worker/src/tools/{compile,evaluate,drc,metrics}.ts`; `renderUntilSettled` autoroutes, no separate autoroute step needed)

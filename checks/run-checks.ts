@@ -51,3 +51,37 @@ export async function runChecks(
   failures.push(...unique);
   return { ...base, passed: failures.length === 0, failures, drc_errors: drc.drc_errors };
 }
+
+/** Check names (as they appear in `failures[].check`) that `expected` actually grades. drc always runs. */
+export function appliedChecks(expected: ExpectedChecks): string[] {
+  const has = (...lists: (unknown[] | object | undefined)[]) =>
+    lists.some((l) => (Array.isArray(l) ? l.length > 0 : l !== undefined));
+  const applied: [string, boolean][] = [
+    ["connectivity", has(expected.nets)],
+    ["separate", has(expected.separate)],
+    ["pullups", has(expected.i2c)],
+    ["decoupling", has(expected.decoupling)],
+    ["resistors", has(expected.resistors)],
+    ["tied", has(expected.tied)],
+    ["leds", has(expected.leds, expected.led_paths, expected.led_drivers)],
+    ["divider", has(expected.dividers)],
+    ["rc", has(expected.rc)],
+    ["switch", has(expected.switches)],
+    ["drc", true],
+  ];
+  return applied.filter(([, on]) => on).map(([name]) => name);
+}
+
+/**
+ * Partial credit for one graded board: the share of applied check categories with no failure (0..1).
+ * A board that couldn't be read at all ("input") scores 0. Throws on a failure from a category `expected`
+ * doesn't apply, which means appliedChecks has drifted from the rules. Scoring only: never shown to agents.
+ */
+export function checkScore(result: Pick<RunResult, "failures">, expected: ExpectedChecks): number {
+  if (result.failures.some((f) => f.check === "input")) return 0;
+  const applied = appliedChecks(expected);
+  const failed = new Set(result.failures.map((f) => f.check));
+  const unknown = [...failed].filter((c) => !applied.includes(c));
+  if (unknown.length) throw new Error(`checkScore: failures from checks this spec doesn't apply: ${unknown.join(", ")}`);
+  return 1 - failed.size / applied.length;
+}

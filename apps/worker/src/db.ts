@@ -2,6 +2,7 @@
 // The worker is the only process that writes design state.
 import { MongoClient } from "mongodb";
 import type { HarnessConfig, Lesson, RunResult, Subcircuit, WorkItem } from "@ripple/types";
+import type { QualityComparison, RunQuality } from "./harness/quality.js";
 
 /** A work-queue step. `waiting_on` shrinks as dependencies finish; an item is ready when it's empty. */
 export type StoredWorkItem = WorkItem & {
@@ -30,6 +31,14 @@ export type StoredRun = RunResult & {
   /** Ids of lessons/subcircuits retrieved into the coder's context for this attempt (the "why?" view). */
   lessons_used?: string[];
   subcircuits_used?: string[];
+  /** Spec the board was built for (single-board runs), so the gate can compare versions spec by spec. */
+  spec_id?: string;
+  /** Partial credit (0..1): share of the spec's hidden-check categories this attempt passed. Never shown to agents. */
+  check_score?: number;
+  /** Size, routing, part count and BOM of the compiled board (tools/metrics.ts). */
+  quality?: RunQuality;
+  /** Set on the one run whose board was kept (the passing attempt). */
+  final?: boolean;
   /** On `stage: "critique"` runs: the critic's diagnosis and the fix it gave the coder's next attempt. */
   critique?: {
     diagnosis: { check: string; cause: string }[];
@@ -71,6 +80,8 @@ export type StoredConfig = HarnessConfig & {
   claimed_at?: string;
   /** The one child version the gate kept on top of this one; claimed atomically so two sibling proposals can't both be kept. */
   succeeded_by?: number;
+  /** Board quality vs the parent, spec by spec (harness/quality.ts), as the gate measured it. */
+  quality_vs_parent?: QualityComparison;
 };
 /** One row of `npm run ablation`'s table (DESIGN.md §7), so Jack can show it instead of fixture data. */
 export interface StoredAblationRow {
@@ -80,6 +91,10 @@ export interface StoredAblationRow {
   total: number;
   avg_attempts: number;
   avg_cost_usd: number;
+  /** Mean partial credit (0..1). */
+  check_score: number;
+  /** Board quality vs the v0 row on the same held-out specs (vN row only). */
+  quality_vs_v0?: QualityComparison;
   ts: string;
 }
 

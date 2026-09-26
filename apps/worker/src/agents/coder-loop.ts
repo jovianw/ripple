@@ -8,6 +8,7 @@ import type { BoardMetrics, HarnessConfig, RunResult, Spec } from "@ripple/types
 import { retrieveLessons, retrieveSubcircuits, addLesson, addSubcircuit, markLessonsHelped, markSubcircuitsReused, indexFailure } from "../harness/memory.js";
 import { col } from "../db.js";
 import { createComplete } from "../tools/router.js";
+import { computeMetrics, type CircuitMetrics } from "../tools/metrics.js";
 import { runCoder, CoderCompileError, type CoderResult } from "./coder.js";
 import { runCritic, type CriticResult } from "./critic/index.js";
 import { describeLayout } from "./critic/layout.js";
@@ -61,11 +62,14 @@ export interface RunBoardResult {
   /** Last generated source, including code that didn't compile. */
   source?: string;
   criticResults: CriticResult[];
+  /** Best partial credit over the attempts (0..1); 1 when the board passed. */
+  checkScore: number;
 }
 
 type Checks = {
   runChecks: (json: unknown, expected: unknown, meta?: { board_id?: string; harness_version?: number }) => Promise<RunResult>;
   loadExpected: (id: string) => unknown;
+  checkScore: (result: Pick<RunResult, "failures">, expected: unknown) => number;
 };
 
 /** The hidden checker, loaded by path at runtime so checks/ stays out of the worker's build (same as assembler.ts). */
@@ -73,14 +77,8 @@ async function loadChecks(): Promise<Checks> {
   return (await import(new URL("../../../../checks/index.ts", import.meta.url).href)) as Checks;
 }
 
-function toBoardMetrics(m: CoderResult["metrics"]): BoardMetrics {
-  return {
-    area_mm2: m.area_mm2 ?? 0,
-    vias: m.vias,
-    trace_mm: m.trace_mm,
-    // circuit-json has no price field (see metrics.ts) — not derivable yet.
-    bom_usd: 0,
-  };
+function toBoardMetrics(m: CircuitMetrics): BoardMetrics {
+  return { area_mm2: m.area_mm2, vias: m.vias, trace_mm: m.trace_mm, bom_usd: m.bom_usd };
 }
 
 export async function runBoard(specId: string, config: HarnessConfig, opts: RunBoardOptions = {}): Promise<RunBoardResult> {
@@ -99,7 +97,11 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
     const recheck = cached ? await checks.runChecks(cached.circuit_json, expectedFor(cached.circuit_json), { board_id: boardId, harness_version: config.version }) : null;
     if (cached && recheck?.passed) {
       const run: RunResult = { ...recheck, stage: "cache_hit" };
-      await col.runs.replaceOne({ _id: `${boardId}_1` }, run, { upsert: true });
+      await col.runs.replaceOne(
+        { _id: `${boardId}_1` },
+        { ...run, spec_id: specId, check_score: 1, quality: computeMetrics(cached.circuit_json), final: true },
+        { upsert: true },
+      );
       // A copy under this request's own board_id, not a pointer to the original: every other view
       // (`/boards/<id>`, the harness timeline) already assumes one board_id per request.
       await col.boards.insertOne({
@@ -115,7 +117,7 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
         cached_from: cached.board_id,
         created_at: new Date(),
       });
-      return { specId: spec._id, boardId, attempts: 0, runResult: run, criticResults: [] };
+      return { specId: spec._id, boardId, attempts: 0, runResult: run, criticResults: [], checkScore: 1 };
     }
   }
 
@@ -126,6 +128,69 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
     ? await Promise.all([retrieveLessons(spec.text, config.context), retrieveSubcircuits(spec.text, config.context)])
     : [[], []];
 
+  // A rerun under the same board id starts over: no earlier run is the kept one any more.
+  if (opts.boardId) await col.runs.updateMany({ board_id: boardId, final: true }, { $unset: { final: "" } });
+
+  /** Hidden checks and partial credit for one compiled design. */
+  const grade = async (
+    circuitJson: unknown,
+    metrics: CircuitMetrics,
+    model?: CoderResult["model"],
+  ): Promise<{ runResult: RunResult; checkScore: number }> => {
+    const exp = opts.expectedFor ? opts.expectedFor(circuitJson) : expected;
+    const checked = await checks.runChecks(circuitJson, exp, { board_id: boardId, harness_version: config.version });
+    return {
+      runResult: {
+        ...checked,
+        metrics: toBoardMetrics(metrics),
+        ...(model && { model: model.tier, tokens: model.totalTokens, cost_usd: model.costUsd }),
+      },
+      checkScore: checks.checkScore(checked, exp),
+    };
+  };
+  /** Code that doesn't compile or render is a failed attempt, not a crash: record it and let the critic fix it. */
+  const compileFailure = (err: CoderCompileError): RunResult => ({
+    board_id: boardId,
+    harness_version: config.version,
+    stage: "compile",
+    passed: false,
+    failures: [{ check: "compile", detail: err.message }],
+    drc_errors: 0,
+    model: err.model.tier,
+    tokens: err.model.totalTokens,
+    cost_usd: err.model.costUsd,
+    ts: new Date().toISOString(),
+  });
+  const saveRun = (_id: string, run: RunResult, checkScore: number, quality?: CircuitMetrics) =>
+    col.runs.replaceOne(
+      { _id },
+      {
+        ...run,
+        spec_id: specId,
+        check_score: checkScore,
+        ...(quality && { quality }),
+        lessons_used: lessons.map((l) => l._id),
+        subcircuits_used: subcircuits.map((s) => s._id),
+      },
+      { upsert: true },
+    );
+  // Same shape as the finale's final board (docs/frontend-backend.md) —
+  // insertOne with an auto _id, matching the finale pipeline's convention (planned-board.ts):
+  // boards accumulate one doc per attempt, consumers take the latest by created_at.
+  const saveBoard = (run: RunResult, boardSource: string, circuitJson: unknown) =>
+    col.boards.insertOne({
+      board_id: boardId,
+      kind: "single",
+      spec_id: specId,
+      harness_version: config.version,
+      source: boardSource,
+      circuit_json: circuitJson,
+      passed: run.passed,
+      failures: run.failures,
+      ...(opts.cacheKey && { cache_key: opts.cacheKey }),
+      created_at: new Date(),
+    });
+
   let coderResult: CoderResult | undefined;
   let runResult: RunResult | undefined;
   let previousFailure: string | undefined;
@@ -135,11 +200,12 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
   let repairSource: string | undefined;
   const criticResults: CriticResult[] = [];
   let attempts = 0;
+  let bestCheckScore = 0;
   const maxAttempts = Math.max(1, config.workflow.repair_budget);
 
   while (attempts < maxAttempts) {
     attempts++;
-    // Code that doesn't compile or render is a failed attempt, not a crash: record it and let the critic fix it.
+    let checkScore = 0;
     try {
       coderResult = await runCoder({
         specText: spec.text,
@@ -154,56 +220,18 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
       // Auto-placed parts move whenever another part gets a position, which would make the critic's positions
       // (and the layout's clear spots) wrong by the next render. Pinning where they are now keeps them valid.
       repairSource = bakePlacement(withoutPlacement(source), coderResult.circuitJson as never);
-      const checked = await checks.runChecks(coderResult.circuitJson, opts.expectedFor ? opts.expectedFor(coderResult.circuitJson) : expected, {
-        board_id: boardId,
-        harness_version: config.version,
-      });
-      runResult = {
-        ...checked,
-        metrics: toBoardMetrics(coderResult.metrics),
-        model: coderResult.model.tier,
-        tokens: coderResult.model.totalTokens,
-        cost_usd: coderResult.model.costUsd,
-      };
+      ({ runResult, checkScore } = await grade(coderResult.circuitJson, coderResult.metrics, coderResult.model));
     } catch (err) {
       if (!(err instanceof CoderCompileError)) throw err;
       coderResult = undefined;
       source = err.source;
       repairSource = err.source;
-      runResult = {
-        board_id: boardId,
-        harness_version: config.version,
-        stage: "compile",
-        passed: false,
-        failures: [{ check: "compile", detail: err.message }],
-        drc_errors: 0,
-        model: err.model.tier,
-        tokens: err.model.totalTokens,
-        cost_usd: err.model.costUsd,
-        ts: new Date().toISOString(),
-      };
+      runResult = compileFailure(err);
     }
+    bestCheckScore = Math.max(bestCheckScore, checkScore);
 
-    await col.runs.replaceOne(
-      { _id: `${boardId}_${attempts}` },
-      { ...runResult, lessons_used: lessons.map((l) => l._id), subcircuits_used: subcircuits.map((s) => s._id) },
-      { upsert: true },
-    );
-    // Same shape as the finale's final board (docs/frontend-backend.md), one per attempt —
-    // insertOne with an auto _id, matching the finale pipeline's convention (planned-board.ts):
-    // boards accumulate one doc per attempt, consumers take the latest by created_at.
-    await col.boards.insertOne({
-      board_id: boardId,
-      kind: "single",
-      spec_id: specId,
-      harness_version: config.version,
-      source: source ?? "",
-      circuit_json: coderResult?.circuitJson ?? null,
-      passed: runResult.passed,
-      failures: runResult.failures,
-      ...(opts.cacheKey && { cache_key: opts.cacheKey }),
-      created_at: new Date(),
-    });
+    await saveRun(`${boardId}_${attempts}`, runResult, checkScore, coderResult?.metrics);
+    await saveBoard(runResult, source ?? "", coderResult?.circuitJson ?? null);
 
     if (runResult.passed) break;
 
@@ -262,6 +290,9 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
 
   if (!runResult) throw new Error(`runBoard(${specId}) produced no result`);
 
+  // The kept board's run, for scoreVersion's board quality (the last attempt, when it passed).
+  if (runResult.passed) await col.runs.updateOne({ _id: `${boardId}_${attempts}` }, { $set: { final: true } });
+
   // Episodic memory: a failed board becomes searchable by what went wrong (memory.similarFailures).
   if (!runResult.passed && writeMemory && runResult.failures.length) {
     const summary = `${specId}: ${runResult.failures.slice(0, 6).map((f) => `${f.check}: ${f.detail}`).join(" | ")}`.slice(0, 800);
@@ -279,7 +310,7 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
     await markSubcircuitsReused(subcircuits.map((s) => s._id));
   }
 
-  return { specId, boardId, attempts, runResult, coderResult, source, criticResults };
+  return { specId, boardId, attempts, runResult, coderResult, source, criticResults, checkScore: bestCheckScore };
 }
 
 export interface RunBatchOptions extends RunBoardOptions {
@@ -307,6 +338,7 @@ export async function runBatch(specIds: string[], config: HarnessConfig, opts: R
           boardId: boardOpts.boardId ?? "",
           attempts: 0,
           criticResults: [],
+          checkScore: 0,
           runResult: {
             board_id: boardOpts.boardId ?? "",
             harness_version: config.version,

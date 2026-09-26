@@ -30,9 +30,22 @@ export interface HarnessConfig {
     checks_passed: number;
     attempts_per_board: number;
     cost_per_board_usd: number;
+    /** Added after kickoff (optional, additive): mean partial credit, share of applied hidden-check categories passed. */
+    check_score?: number;
+    /** Added after kickoff (optional, additive): means over passing boards, null when none passed. Display only. */
+    board?: BoardQualityMeans | null;
   };
   verdict: Verdict;
   rationale: string;
+}
+
+export interface BoardQualityMeans {
+  area_mm2: number;
+  density: number;
+  detour: number;
+  vias: number;
+  parts: number;
+  bom_usd: number;
 }
 
 export interface CheckFailure {
