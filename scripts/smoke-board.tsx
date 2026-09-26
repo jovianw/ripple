@@ -1,14 +1,17 @@
 // Renders a board through the tscircuit autorouter and DRC.
-// Usage: npm run smoke [led|t03]. Default: led. Exits 1 on any error.
+// Usage: npm run smoke [led|<spec id>|t03]. Default: led. Exits 1 on any error.
 import { writeFileSync, mkdirSync } from "node:fs"
 import { RootCircuit } from "tscircuit"
 import { runAllChecks } from "@tscircuit/checks"
 import { convertCircuitJsonToPcbSvg } from "circuit-to-svg"
 import { LedBoard } from "../examples/led-board.tsx"
-import { T03Reference } from "../checks/reference/t03_ldo_3v3.tsx"
+import { referenceBoards } from "../checks/reference/index.ts"
 
-const boards = { led: LedBoard, t03: T03Reference }
-const name = (process.argv[2] ?? "led") as keyof typeof boards
+// Reference boards by full spec id or short prefix (t03, h01...).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const boards: Record<string, () => any> = { led: LedBoard, ...referenceBoards }
+for (const id of Object.keys(referenceBoards)) boards[id.split("_")[0]] = referenceBoards[id]
+const name = process.argv[2] ?? "led"
 const Board = boards[name]
 if (!Board) throw new Error(`unknown board ${name}; use ${Object.keys(boards).join("|")}`)
 
