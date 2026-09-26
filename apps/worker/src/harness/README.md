@@ -24,6 +24,7 @@ Scripts under `scripts/` import the `.ts` files directly (`../apps/worker/src/ha
 | `npm run seed:config` | Inserts harness config v0 if missing and prints the current config. Safe to re-run. Already done. |
 | `npm run green` | Checks writer, read-only reader, Voyage, and one cheap OpenRouter call traced in LangSmith. `npm run green -- voyage` runs one check. |
 | `npm run queue:demo` | Kill-and-resume demo on a finale-shaped board with a stand-in handler. `-- --reset` starts over. Ctrl+C mid-run, rerun, it resumes. |
+| `npm run evolve` | Batch → meta-agent proposal → gate decision, per round. `-- --rounds 3`, `-- --specs t04_...,t08_...`. Spends model budget. |
 
 Env: `MONGODB_URI`, `MONGODB_DB=ripple`, `VOYAGE_API_KEY`, optional `VOYAGE_MODEL` (default `voyage-4`, 1024 dims),
 `VOYAGE_RERANK_MODEL` (default `rerank-2.5`), optional `WORKER_ID` (default `worker-<hostname>`).
@@ -99,6 +100,22 @@ const decision = await evaluatePending((config) => runBatch(TRAINING_SPEC_IDS, c
 Meta-agent loop: `propose(change, rationale)` → `evaluatePending(...)` → read `decision.verdict` / `reasons`. Rejected and
 rolled-back versions stay in `harness_versions` for the config diff view.
 
+Pass `{ parentBoardIds }` when you already ran a batch under the parent (the evolve loop does): the parent is scored from
+those boards instead of being run again.
+
+## `npm run evolve`: the recursive-harnessing loop
+
+`scripts/evolve.ts` ties it together, one round per `--rounds`: `runBatch` (training specs) under `currentConfig()` →
+Arjun's `proposeFromBatch` (meta-agent; may propose nothing) → `evaluatePending` with a fresh test batch under the
+proposal, reusing the first batch for the parent → prints the config diff and the verdict. Training specs only; held-out
+specs are refused. `--specs a,b` limits the batch (cheaper while developing).
+
+## Change streams
+
+Decided at 12:35: no change-stream triggers in the worker. Arjun's loop calls the critic directly, and `npm run evolve`
+calls the meta-agent after each batch, so triggers would double-run them. Change streams are used for the UI's live run
+feed (a local route handler holding a `runs` change stream; see `docs/frontend-backend.md`).
+
 ## `harness/memory.ts`: lessons, subcircuits, similar failures
 
 Retrieval always takes the config's context policy, so the meta-agent can tune it:
@@ -156,7 +173,3 @@ Queue item fields beyond `WorkItem` (`_id` is `"<board_id>:<key>"`): `key`, `ste
 `finished_at`, `error`. `heartbeat` is an ISO string refreshed every 5 s; items whose worker stops heartbeating for 30 s
 are put back as pending.
 
-## Coming next (Jovian)
-
-- Change streams: meta-agent trigger when a batch finishes, and a runs feed helper for the UI. No critic trigger: Arjun's
-  loop calls the critic directly.

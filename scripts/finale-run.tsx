@@ -3,9 +3,11 @@
 //
 //   npm run finale -- --stub            dry run: stand-in planner + coder built from the finale reference (no model calls)
 //   npm run finale                      real run: real planner call + Arjun's runCoder (cheap model)
-//   npm run finale -- --reset [--stub]  delete this board's queue items, runs and boards first
+//   npm run finale -- --reset [--stub]  delete this board's queue items, runs and boards first, then run
+//   npm run finale -- --clean [--stub]  only delete this board from Atlas (e.g. before recording), don't run
 //   options: --board <id> (default finale-dry / finale-live), --spec <id> (default finale)
 // Kill it mid-run (Ctrl+C) and run the same command again: it resumes from the queue.
+// When the board passes, its deliverables are written to out/<board>/ plus out/<board>-deliverables.zip and -gerbers.zip.
 import { readFileSync } from "node:fs"
 import { setTimeout as sleep } from "node:timers/promises"
 import finaleSpec from "../specs/finale.json" with { type: "json" }
@@ -16,7 +18,7 @@ import { currentConfig } from "../apps/worker/src/harness/config.ts"
 import { runPlannedBoard, type PlannedBoardDeps } from "../apps/worker/src/pipeline/planned-board.ts"
 import { evaluateCircuitSource } from "../apps/worker/src/tools/evaluate.ts"
 import { runCoder } from "../apps/worker/src/agents/coder.ts"
-import { buildDeliverables } from "../apps/worker/src/export/deliverables.ts"
+import { buildDeliverables, writeDeliverables } from "../apps/worker/src/export/deliverables.ts"
 import type { PlannerOutput } from "../apps/worker/src/agents/planner/index.ts"
 
 const arg = (name: string) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : undefined }
@@ -29,9 +31,13 @@ const STEP_MS = Number(process.env.STUB_STEP_MS ?? 2000)
 const log = (m: string) => console.log(`${new Date().toISOString().slice(11, 19)} ${m}`)
 
 await connect()
-if (process.argv.includes("--reset")) {
+if (process.argv.includes("--reset") || process.argv.includes("--clean")) {
   const [q, r, b] = await Promise.all([col.queue.deleteMany({ board_id: boardId }), col.runs.deleteMany({ board_id: boardId }), col.boards.deleteMany({ board_id: boardId })])
-  log(`reset ${boardId}: removed ${q.deletedCount} queue items, ${r.deletedCount} runs, ${b.deletedCount} boards`)
+  log(`${process.argv.includes("--clean") ? "cleaned" : "reset"} ${boardId}: removed ${q.deletedCount} queue items, ${r.deletedCount} runs, ${b.deletedCount} boards`)
+  if (process.argv.includes("--clean")) {
+    await client.close()
+    process.exit(0)
+  }
 }
 
 // ---- stand-ins for the dry run: the finale reference split into its three groups ----
@@ -94,8 +100,14 @@ log(`queue: ${progress.done}/${progress.total} done, ${progress.failed} failed, 
 for (const i of progress.items) if (i.status !== "done") log(`  ${i.key} ${i.status}: ${i.error ?? ""}`)
 if (final) {
   log(`final board: ${final.passed ? "PASSED hidden checks" : `failed: ${(final.failures as { detail: string }[]).map((f) => f.detail).join("; ")}`}`)
-  const d = await buildDeliverables({ circuitJson: final.circuit_json, name: boardId, specId, specText: spec.text, source: final.code, harnessVersion: config.version })
-  log(`deliverables: ${d.manifest.files.length} files (${d.skipped.length} skipped); run \`npm run export -- --json\` on the stored circuit to write them`)
+  const finalRun = await col.runs.findOne({ board_id: boardId, stage: "final" }, { sort: { ts: -1 } })
+  const d = await buildDeliverables({
+    circuitJson: final.circuit_json, name: boardId, specId, specText: spec.text, source: final.code,
+    harnessVersion: config.version, result: finalRun ?? undefined,
+  })
+  const paths = writeDeliverables(d, boardId)
+  log(`deliverables: ${d.manifest.files.length} files${d.skipped.length ? ` (${d.skipped.length} skipped: ${d.skipped.map((x) => x.path).join(", ")})` : ""}`)
+  log(`  ${paths.dir}/   ${paths.zip}   ${paths.gerbers}`)
 }
 await client.close()
 process.exit(final?.passed ? 0 : 1)

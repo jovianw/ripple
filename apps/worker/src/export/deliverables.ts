@@ -24,6 +24,8 @@ import { convertCircuitJsonToGltf } from "circuit-json-to-gltf"
 import { circuitJsonToSpice, convertSpiceNetlistToString } from "circuit-json-to-spice"
 import { Resvg } from "@resvg/resvg-js"
 import { zipSync, strToU8 } from "fflate"
+import { mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { dirname } from "node:path"
 
 export type Category = "fabrication" | "assembly" | "cad" | "3d" | "image" | "data" | "simulation" | "report"
 
@@ -298,4 +300,19 @@ export function zipDeliverables(d: Deliverables, name: string): Uint8Array {
 export function zipFabrication(d: Deliverables): Uint8Array {
   const fab = Object.entries(d.files).filter(([p]) => p.startsWith("fabrication/"))
   return zipSync(Object.fromEntries(fab.map(([p, data]) => [p.slice("fabrication/".length), typeof data === "string" ? strToU8(data) : data])), { level: 6 })
+}
+
+/** Writes <outDir>/<name>/ (every file), <name>-deliverables.zip and <name>-gerbers.zip. Returns the paths written. */
+export function writeDeliverables(d: Deliverables, name: string, outDir = "out"): { dir: string; zip: string; gerbers: string } {
+  const dir = `${outDir}/${name}`
+  rmSync(dir, { recursive: true, force: true })
+  for (const [path, data] of Object.entries(d.files)) {
+    mkdirSync(dirname(`${dir}/${path}`), { recursive: true })
+    writeFileSync(`${dir}/${path}`, data)
+  }
+  const zip = `${outDir}/${name}-deliverables.zip`
+  const gerbers = `${outDir}/${name}-gerbers.zip`
+  writeFileSync(zip, zipDeliverables(d, name))
+  writeFileSync(gerbers, zipFabrication(d))
+  return { dir, zip, gerbers }
 }

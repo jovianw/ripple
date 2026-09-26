@@ -56,11 +56,13 @@ Check tscircuit works: `npm run smoke` renders `examples/led-board.tsx` through 
 | `npm run export <board>` | All deliverables (Gerbers, BOM, KiCad, 3D, images, report) to `out/<board>/` and zips |
 | `npm run test:planner` / `test:assembler` / `test:export` | Planner, assembler, deliverables tests |
 | `npm run try:critic` / `try:planner` | One real model call each (cheap model, ~1 cent) |
-| `npm run finale -- --stub [--reset]` | Finale through the durable queue with stand-in planner + coder (no model calls). Ctrl+C mid-run, rerun: it resumes |
+| `npm run finale -- --stub [--reset]` | Finale through the durable queue with stand-in planner + coder (no model calls). Ctrl+C mid-run, rerun: it resumes. Writes deliverables to `out/<board>/` and zips |
+| `npm run finale -- --stub --clean` | Delete the finale board from Atlas without running (do this before recording) |
 | `npm run finale` | Same with the real planner and coder (cheap model) |
 | `npm run green` | Checks Atlas writer, read-only reader, Voyage, OpenRouter + LangSmith |
 | `npm run setup:indexes` / `npm run seed:config` | Atlas collections and indexes / harness config v0 (both done; safe to re-run) |
 | `npm run queue:demo` | Work-queue kill-and-resume demo (Ctrl+C mid-run, rerun, it resumes) |
+| `npm run evolve` | Recursive-harnessing loop: batch → meta-agent proposal → config gate verdict (`-- --rounds N`, `-- --specs a,b`; spends model budget) |
 
 ## Specs and parts
 
