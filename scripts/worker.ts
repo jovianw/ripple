@@ -2,8 +2,8 @@
 //   npm run worker
 // A request `{ spec_id }` runs that spec under the current config: training/held-out specs through Arjun's runBoard,
 // "finale" through Marcos's planned-board pipeline (work queue, kill-and-resume). Free text `{ text }` runs through the
-// same loop with generic checks built from the board (Marcos's `genericExpected` in checks/ once it exists; DRC only
-// until then) and never writes the memory library. One request at a time (model budget).
+// same loop with Marcos's generic checks (checks/generic.ts, built from the board and the text) and never writes
+// the memory library. One request at a time (model budget).
 // Ctrl+C stops it; restarting picks up interrupted requests.
 import { randomUUID } from "node:crypto";
 import specs from "../specs/specs.json" with { type: "json" };
@@ -33,10 +33,10 @@ const { runPlannedBoard } = (await load("../apps/worker/src/pipeline/planned-boa
 const { liveDeps } = (await load("../apps/worker/src/pipeline/live-deps.ts")) as {
   liveDeps: (spec: { _id: string; text: string }, boardId: string, config: HarnessConfig, log?: (m: string) => void) => unknown;
 };
-const checks = (await load("../checks/index.ts")) as { genericExpected?: (circuitJson: unknown) => unknown };
-// Free text has no hidden-check file. Generic checks come from the board itself; until Marcos's lands, DRC only
-// (runChecks always runs DRC).
-const genericExpected = (circuitJson: unknown) => checks.genericExpected?.(circuitJson) ?? {};
+const checks = (await load("../checks/index.ts")) as { genericExpected?: (circuitJson: unknown, specText?: string) => unknown };
+// Free text has no hidden-check file: Marcos's generic checks are built from the board and the spec text
+// (header labels come from the text). DRC only if checks/ doesn't export them.
+const genericExpected = (circuitJson: unknown, text: string) => checks.genericExpected?.(circuitJson, text) ?? {};
 
 const SPECS = specs as { _id: string; split: string; text: string }[];
 const log = (m: string) => console.log(`${new Date().toISOString().slice(11, 19)} ${m}`);
@@ -63,7 +63,7 @@ await serveRequests(
         boardId,
         writeMemory: false, // ungraded by hidden checks: never enters the subcircuit library
         spec: { _id: specId, text, split: "train" },
-        expectedFor: genericExpected,
+        expectedFor: (circuitJson) => genericExpected(circuitJson, text),
       });
       return { passed: r.runResult.passed, attempts: r.attempts };
     }
