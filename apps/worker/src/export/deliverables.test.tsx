@@ -48,6 +48,8 @@ test("board views: PCB and schematic SVG, BOM and netlist, with a manifest that 
   assert.equal(v.manifest.name, "req-abc123")
   assert.equal(v.manifest.spec_id, "adhoc-abc123")
   assert.equal(v.manifest.metrics.components, 20)
+  for (const k of ["width_mm", "height_mm"] as const)
+    assert.equal(v.manifest.metrics[k], Math.round(v.manifest.metrics[k] * 100) / 100, `${k} is rounded to 0.01mm`)
   assert.equal(v.manifest.files.find((f) => f.path === "images/pcb.svg")!.mime, "image/svg+xml")
   // Small enough to live on the board's Atlas record (16MB document limit).
   assert.ok(JSON.stringify(v).length < 2_000_000, `${JSON.stringify(v).length} bytes`)
