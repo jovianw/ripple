@@ -16,7 +16,7 @@ export const BASELINE: HarnessConfig = {
     parts_whitelist: "v1",
     mcp: { planner: [], coder: [], critic: ["find", "aggregate"], meta: ["find", "aggregate"] },
   },
-  workflow: { plan_first: false, repair_budget: 3, split_over_parts: 12 },
+  workflow: { plan_first: false, repair_budget: 5, split_over_parts: 12 },
   routing: { planner: "strong", coder: "cheap", critic: "strong", meta: "strong" },
   verdict: "kept",
   rationale: "Baseline (v0): design loop and hidden checks only.",

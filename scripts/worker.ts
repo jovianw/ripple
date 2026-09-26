@@ -70,10 +70,18 @@ process.on("SIGINT", () => {
   stop.abort();
 });
 
+// Builds from the site get at least this many design attempts, whatever the kept config says. Applied here, not
+// in the stored config, so versioned configs and the ablation keep measuring exactly what they recorded.
+const MIN_REPAIR_BUDGET = 5;
+const withMinBudget = (config: HarnessConfig): HarnessConfig => ({
+  ...config,
+  workflow: { ...config.workflow, repair_budget: Math.max(config.workflow.repair_budget, MIN_REPAIR_BUDGET) },
+});
+
 log(`worker ${defaultWorkerId()} waiting for spec requests (concurrency ${concurrency})`);
 await serveRequests(
   async (req, setBoard) => {
-    const config = await currentConfig();
+    const config = withMinBudget(await currentConfig());
     if (!req.spec_id) {
       const text = (req.text ?? "").trim();
       if (!text) throw new Error("request has neither spec_id nor text");
