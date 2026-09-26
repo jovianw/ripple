@@ -72,4 +72,7 @@ VCC shorted to GND) and asserts each fails on the right check with a clear detai
 names pass, and each common mistake (wrong LED resistor, reversed LED, shared CC resistor, missing
 pull-ups, floating address pin, far decoupling cap, wrong divider ratio, wrong RC cutoff, shared LED
 resistor) fails on the right check.
+`reference.test.tsx` renders the reference board in [reference/](reference/) for every spec in
+`specs/specs.json` and asserts it passes that spec's checks with 0 DRC errors, so every spec is
+known to be solvable with whitelisted parts.
 Typecheck this folder with `npx tsc -p checks`.
