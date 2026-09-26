@@ -238,7 +238,8 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 - [ ] 10-minute PCB primer for the team at kickoff
 - [x] **11:00–12:30** 8 training and 4 held-out specs (`specs/specs.json`); hidden checker returning `RunResult` (`checks/`, `npm run test:checks`); reference board per spec
 - [x] **12:30–1:30** Critic agent (code and prompt) and lesson extraction into Atlas (`apps/worker/src/agents/critic/`: strict JSON output, lesson quality gate, no lessons from held-out specs; `npm run try:critic`. Takes Arjun's router as `complete` and Jovian's `addLesson`)
-- [ ] **1:30–2:30** Planner agent and assembler (assembler: Fable agent on `dev-marcos-assembler`)
+- [x] **1:30–2:30** Planner agent (`apps/worker/src/agents/planner/`: returns work items for `queue.enqueue`, validated in code, honors `plan_first` and `split_over_parts`, replans keep done items; `checkInterface` for step checks; `npm run test:planner`, `npm run try:planner`)
+- [ ] Assembler (Fable agent on `dev-marcos-assembler`)
 - [x] Parts whitelist (`parts/whitelist.json` v2, `npm run verify:parts`)
 - [x] Finale board spec (`specs/finale.json`), checks, and 20-part reference board in three groups (`npm run smoke finale`)
 - [ ] **2:30–3:30** Finale first full run through the work queue
