@@ -4,9 +4,9 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 
 import {
-  activeActors,
   boardTotals,
   buildHarnessObservations,
+  LOOP_STAGE_MAP,
 } from "@/lib/harness-observability";
 import type {
   HarnessDoc,
@@ -20,7 +20,7 @@ import { getJson, usePolling } from "@/lib/usePolling";
 import { CurrentExecution } from "./CurrentExecution";
 import { ExecutionTimeline } from "./ExecutionTimeline";
 import { HarnessEvolution } from "./HarnessEvolution";
-import { HarnessTopology } from "./HarnessTopology";
+import { DesignLoop } from "./DesignLoop";
 import { HarnessVersionView } from "./HarnessVersionView";
 import { ObservationInspector } from "./ObservationInspector";
 import { QueueView } from "./QueueView";
@@ -101,7 +101,20 @@ export function HarnessDashboard() {
   );
 
   const latest = observations[0] ?? null;
-  const active = useMemo(() => activeActors(observations), [observations]);
+
+  // Where the loop is now, and the step before it, so the connector between
+  // them can show the direction of travel.
+  const runObservations = useMemo(
+    () => observations.filter((o) => o.source === "run" && o.stage),
+    [observations],
+  );
+  const activeLoopStage = runObservations[0]?.stage
+    ? (LOOP_STAGE_MAP[runObservations[0].stage] ?? null)
+    : null;
+  const previousLoopStage = runObservations[1]?.stage
+    ? (LOOP_STAGE_MAP[runObservations[1].stage] ?? null)
+    : null;
+  const loopFailing = runObservations[0]?.status === "failure";
   const totals = useMemo(() => boardTotals(boardRuns), [boardRuns]);
 
   const runningItem = boardQueue.find((q) => q.status === "running") ?? null;
@@ -198,9 +211,13 @@ export function HarnessDashboard() {
           </section>
 
           <section>
-            <Head title="Topology" note="live state over known architecture" />
+            <Head title="Design loop" note="live stage" />
             <div className="mt-2.5">
-              <HarnessTopology active={active} lastActor={latest?.actor ?? null} />
+              <DesignLoop
+                active={activeLoopStage}
+                previous={previousLoopStage}
+                failed={loopFailing}
+              />
             </div>
           </section>
 

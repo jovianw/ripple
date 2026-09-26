@@ -12,6 +12,7 @@
   --void: #07090b;        /* world background, matches the skybox base */
   --raised: #0a0d10;      /* barely-there lift for instrumentation areas */
   --hair: rgba(255, 255, 255, 0.07);
+  --line-soft: rgba(255, 255, 255, 0.16);
 
   --ink: #e9ebed;         /* neutral white, slightly warm */
   --dim: #98a1ab;
@@ -85,4 +86,21 @@ body {
 .slim-scroll {
   scrollbar-width: thin;
   scrollbar-color: var(--ghost) transparent;
+}
+
+/* Marching ants: shows the direction of travel between two loop stages. */
+@keyframes dash-march {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+
+.dash-march {
+  animation: dash-march 700ms linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-march {
+    animation: none;
+  }
 }

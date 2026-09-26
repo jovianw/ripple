@@ -73,6 +73,34 @@ export const STAGE_ACTOR_MAP: Record<string, Actor> = {
   error: "system",
 };
 
+/** The design loop, as documented. `telemetry: false` means no run is ever
+ *  written for that step, so it can never light up — shown honestly rather
+ *  than drawn as idle. */
+export type LoopStage = "spec" | "write" | "compile" | "check" | "critique" | "save";
+
+export const DESIGN_LOOP: {
+  id: LoopStage;
+  label: string;
+  sub: string;
+  telemetry: boolean;
+}[] = [
+  { id: "spec", label: "Spec", sub: "English", telemetry: false },
+  { id: "write", label: "Write", sub: "tscircuit (TSX)", telemetry: false },
+  { id: "compile", label: "Compile", sub: "Circuit JSON", telemetry: true },
+  { id: "check", label: "Check", sub: "hidden spec, DRC", telemetry: true },
+  { id: "critique", label: "Critique", sub: "lessons", telemetry: true },
+  { id: "save", label: "Save", sub: "subcircuit library", telemetry: true },
+];
+
+/** Run stage -> position in the design loop. */
+export const LOOP_STAGE_MAP: Record<string, LoopStage> = {
+  compile: "compile",
+  checks: "check",
+  final: "check",
+  critique: "critique",
+  subcircuit: "save",
+};
+
 /** Every node the harness has, whether or not it reports telemetry. */
 export const TOPOLOGY: { actor: Actor; label: string }[] = [
   { actor: "planner", label: "Planner" },
