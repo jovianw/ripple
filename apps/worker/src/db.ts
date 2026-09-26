@@ -1,7 +1,12 @@
 // Atlas connection for the worker (writer user). Owner: Jovian.
 // The worker is the only process that writes design state.
 import { MongoClient } from "mongodb";
-import type { HarnessConfig, RunResult } from "@ripple/types";
+import type { HarnessConfig, Lesson, RunResult, Subcircuit } from "@ripple/types";
+
+// Memory documents carry a few fields beyond the shared draft shapes.
+export type StoredLesson = Lesson & { active: boolean; created_at: Date };
+export type StoredSubcircuit = Subcircuit & { description: string; created_at: Date };
+export type StoredRun = RunResult & { _id?: string; embedding?: number[]; failure_summary?: string };
 
 const uri = process.env.MONGODB_URI;
 if (!uri) throw new Error("MONGODB_URI is not set; copy .env.example to .env");
@@ -22,11 +27,11 @@ export const db = client.db(process.env.MONGODB_DB || "ripple");
 export const col = {
   harness: db.collection<HarnessConfig>("harness_versions"),
   specs: db.collection("specs"),
-  subcircuits: db.collection("subcircuits"),
+  subcircuits: db.collection<StoredSubcircuit>("subcircuits"),
   boards: db.collection("boards"),
   queue: db.collection("work_queue"),
-  runs: db.collection<RunResult>("runs"),
-  lessons: db.collection("lessons"),
+  runs: db.collection<StoredRun>("runs"),
+  lessons: db.collection<StoredLesson>("lessons"),
 };
 
 export async function connect() {
