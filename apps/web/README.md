@@ -74,3 +74,28 @@ available, write a `CircuitJSON -> PCBState` adapter and leave the scene alone.
   frame loop can never strand a trace at zero length.
 - WebGL failures are caught by a boundary in `PCBViewport`; the rest of the
   dashboard keeps working.
+
+## Deliverables
+
+`GET /api/boards/:id/deliverables` returns the manifest; `?file=<path>` returns
+one file with its MIME type. Zips are served from `/deliverables/<id>-*.zip`.
+The route is **Node runtime, never Edge** — the exporter depends on the native
+`@resvg/resvg-js`.
+
+Today it serves a bundle pre-generated with `npm run export t04`, committed
+under `public/deliverables/`. `buildDeliverables` takes a couple of seconds,
+which is fine for a CLI and far too slow to sit in front of a live demo. When
+boards land in Atlas, swap the resolver for:
+
+```ts
+const board = await boards.findOne({ _id: id })
+const d = await buildDeliverables({ circuitJson: board.circuit_json, name: id })
+```
+
+and leave the responses identical.
+
+Only paths listed in the manifest are served, and board ids are pattern-checked,
+so neither can be used to walk out of the bundle directory.
+
+**Never feed deliverables back to the agents** — `report.md` embeds hidden-check
+failure detail.

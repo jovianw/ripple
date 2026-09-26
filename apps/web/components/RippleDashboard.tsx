@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ExecutionTrace } from "@/components/activity/ExecutionTrace";
+import { DeliverablesPanel } from "@/components/deliverables/DeliverablesPanel";
 import { HistoryGraph } from "@/components/build/HistoryGraph";
 import { SpecificationBar } from "@/components/build/SpecificationBar";
 import { StageRibbon } from "@/components/build/StageRibbon";
@@ -20,6 +21,10 @@ import { EMPTY_PCB, type PCBComponent } from "@/lib/types";
 // array, later from an API or change stream. Nothing below this component
 // knows the difference — it all takes BuildSnapshot props.
 const SNAPSHOTS = DEMO_SNAPSHOTS;
+
+// Which board's deliverables the finished run corresponds to. Becomes the real
+// board id once runs are persisted; the panel takes it as a prop either way.
+const DELIVERABLES_BOARD_ID = "t04";
 
 /** One canonical status for the whole system; details live elsewhere. */
 function systemStatus(args: {
@@ -50,6 +55,7 @@ export function RippleDashboard() {
   const [isLive, setIsLive] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
   const [selected, setSelected] = useState<PCBComponent | null>(null);
+  const [showDeliverables, setShowDeliverables] = useState(false);
 
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   // Timers read liveness from a ref so scrubbing never has to cancel the run:
@@ -69,6 +75,7 @@ export function RippleDashboard() {
     setIsLive(true);
     setSelected(null);
     setIsRunning(true);
+    setShowDeliverables(false);
     setRevealed(1);
     setCurrentIndex(0);
 
@@ -94,6 +101,7 @@ export function RippleDashboard() {
     setRevealed(0);
     setCurrentIndex(-1);
     setSelected(null);
+    setShowDeliverables(false);
   }, [clearTimers]);
 
   const scrubTo = useCallback((index: number) => {
@@ -278,9 +286,27 @@ export function RippleDashboard() {
             </div>
           ) : null}
 
-          <div className="pointer-events-none absolute bottom-5 right-6">
-            <Telemetry metrics={metrics} />
+          <div className="absolute bottom-5 right-6 flex items-baseline gap-5">
+            <div className="pointer-events-none">
+              <Telemetry metrics={metrics} />
+            </div>
+            {complete ? (
+              <button
+                type="button"
+                onClick={() => setShowDeliverables(true)}
+                className="trace-in text-[13px] text-accent hover:text-ink"
+              >
+                Deliverables →
+              </button>
+            ) : null}
           </div>
+
+          {showDeliverables ? (
+            <DeliverablesPanel
+              boardId={DELIVERABLES_BOARD_ID}
+              onClose={() => setShowDeliverables(false)}
+            />
+          ) : null}
         </section>
 
         {/* Instrumentation column: a tonal shift and a hairline, no panel. */}

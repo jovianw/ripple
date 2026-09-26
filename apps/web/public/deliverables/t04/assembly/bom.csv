@@ -1,0 +1,6 @@
+"Designator","Comment","Value","Footprint"
+"J1","","","pinrow4"
+"U1","LM75B","","soic8"
+"C1","100n","100n","cap0603"
+"R1","4.7k","4.7k","res0603"
+"R2","4.7k","4.7k","res0603"

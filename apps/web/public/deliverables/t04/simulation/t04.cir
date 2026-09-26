@@ -1,0 +1,5 @@
+* Circuit JSON to SPICE Netlist
+CC1 N1 0 100N
+RR1 N2 N1 4.7K
+RR2 N3 N1 4.7K
+.END
