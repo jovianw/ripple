@@ -30,6 +30,14 @@ export type StoredRun = RunResult & {
   /** Ids of lessons/subcircuits retrieved into the coder's context for this attempt (the "why?" view). */
   lessons_used?: string[];
   subcircuits_used?: string[];
+  /** On `stage: "critique"` runs: the critic's diagnosis and the fix it gave the coder's next attempt. */
+  critique?: {
+    diagnosis: { check: string; cause: string }[];
+    fix: string[];
+    escalate: boolean;
+    escalate_reason?: string;
+    lessons_saved: string[];
+  };
 };
 /**
  * A spec submitted from the web app (inserted by the `ripple_requester` user, readWrite on this collection only).

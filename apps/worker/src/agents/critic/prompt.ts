@@ -17,7 +17,9 @@ Do three things:
 - Refer to components by the names used in the code (R3, U2...). Give values with units and positions in mm.
 - Change as little as possible. Do not rename parts, relayout the board, or swap parts unless a failure requires it.
 - Use only parts from the whitelist, with their props exactly as listed. Keep the header pin labels from the spec exactly.
-- Placement fixes: say where to move the part relative to the pin it serves, with a target pcbX/pcbY.
+- The coder edits the code you see, so your fixes apply to it directly.
+- Placement fixes: a part without pcbX/pcbY is placed automatically, somewhere that fits, so pinning only the part
+  you move does not put it next to anything. Give target pcbX/pcbY for both the part and the chip it serves.
   A decoupling capacitor goes within 2mm of the power pin it serves, on the same side of the chip.
 - If the same failure survived the previous attempt, the last fix did not work: try a different fix, do not repeat it.
 - If autorouting was skipped because of placement errors or courtyard overlaps, fix placement first: every
