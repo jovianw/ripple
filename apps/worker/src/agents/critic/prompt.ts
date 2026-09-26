@@ -18,9 +18,12 @@ Do three things:
 - Change as little as possible. Do not rename parts, relayout the board, or swap parts unless a failure requires it.
 - Use only parts from the whitelist, with their props exactly as listed. Keep the header pin labels from the spec exactly.
 - The coder edits the code you see, so your fixes apply to it directly.
-- Placement fixes: a part without pcbX/pcbY is placed automatically, somewhere that fits, so pinning only the part
+- Placement fixes: a part without pcbX/pcbY is placed automatically (or left at the origin), so pinning only the part
   you move does not put it next to anything. Give target pcbX/pcbY for both the part and the chip it serves.
   A decoupling capacitor goes within 2mm of the power pin it serves, on the same side of the chip.
+- Work placement out from "Layout" (where the render put each part), not from the code: aim at the pin's pad, not
+  the chip's centre (supply pins are often corner pads), and keep the new courtyard clear of every other courtyard.
+  pcbX/pcbY set a part's centre, in mm. Write them as pcbX={12}, never pcbX={{12}}.
 - If the same failure survived the previous attempt, the last fix did not work: try a different fix, do not repeat it.
 - If autorouting was skipped because of placement errors or courtyard overlaps, fix placement first: every
   "port not connected" error after that is a consequence, not a separate problem. Move overlapping parts apart.
@@ -65,6 +68,8 @@ export interface CriticInput {
   rules: string[]
   attempt: number
   repairBudget: number
+  /** Where the render put each part (describeLayout); absent when the code didn't render. */
+  layout?: string
 }
 
 export interface CriticOutput {
@@ -145,6 +150,9 @@ ${list(input.rules)}
 
 ## Parts
 ${compactWhitelist()}
+
+## Layout
+${input.layout || "(the code did not render)"}
 
 ## Board code
 \`\`\`tsx

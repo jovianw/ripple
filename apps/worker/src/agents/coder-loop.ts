@@ -10,6 +10,7 @@ import { col } from "../db.js";
 import { createComplete } from "../tools/router.js";
 import { runCoder, CoderCompileError, type CoderResult } from "./coder.js";
 import { runCritic, type CriticResult } from "./critic/index.js";
+import { describeLayout } from "./critic/layout.js";
 import specs from "../../../../specs/specs.json" with { type: "json" };
 import finale from "../../../../specs/finale.json" with { type: "json" };
 
@@ -167,6 +168,7 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
           rules: config.rules,
           attempt: attempts,
           repairBudget: maxAttempts,
+          layout: coderResult ? describeLayout(coderResult.circuitJson) : undefined,
         },
         { complete: completeCritic, ...(writeMemory && { addLesson }) },
       );
@@ -177,8 +179,8 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
       // per-board sum (attributed to this board — the repair it's fixing).
       if (completeCritic.lastUsage) {
         const u = completeCritic.lastUsage;
-        await col.runs.insertOne({
-          _id: `${boardId}_${attempts}_critique`,
+        // replaceOne, like the checks run: a resumed request reruns its attempts under the same board id.
+        await col.runs.replaceOne({ _id: `${boardId}_${attempts}_critique` }, {
           board_id: boardId,
           harness_version: config.version,
           stage: "critique",
@@ -197,7 +199,7 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
             ...(critic.escalate_reason && { escalate_reason: critic.escalate_reason }),
             lessons_saved: critic.saved_lesson_ids,
           },
-        });
+        }, { upsert: true });
       }
     }
 

@@ -7,12 +7,14 @@
  * - trace-length limits only ever block the autorouter. tscircuit gives every power-to-ground capacitor a 1mm
  *   maximum trace automatically, so each capacitor gets an explicit, generous maxDecouplingTraceLength; coder-set
  *   maxLength/decouplingFor/decouplingTo are removed. The hidden checks still enforce the 3mm placement rule.
- * - ".R1.pin2" selectors -> ".R1 > .pin2"; numeric pinLabels keys ("1") -> "pin1".
+ * - ".R1.pin2" selectors -> ".R1 > .pin2"; numeric pinLabels keys ("1") -> "pin1"; pcbX={{12}} -> pcbX={12}.
  */
 export function normalizeCoderSource(source: string): string {
   return source
     .replace(/\s+(?:maxLength|maxDecouplingTraceLength|decouplingFor|decouplingTo)=(?:"[^"]*"|'[^']*'|\{[^}]*\})/g, "")
     .replace(/<capacitor\b/g, "<capacitor maxDecouplingTraceLength={1000}")
+    // pcbX={{12}} (a coder copying JSX from fix text) doesn't compile: one pair of braces.
+    .replace(/\b(pcbX|pcbY|pcbRotation)=\{\{\s*(-?[\d.]+)\s*\}\}/g, "$1={$2}")
     .replace(/\b(from|to)="\.([A-Za-z_][\w]*)\.([A-Za-z_][\w]*)"/g, '$1=".$2 > .$3"')
     // pinLabels={{"1":"MISO"}} -> pinLabels={{"pin1":"MISO"}}: tscircuit ignores numeric keys.
     .replace(/pinLabels=\{\{([^}]*)\}\}/g, (_m, body: string) =>
