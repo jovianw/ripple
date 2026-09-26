@@ -185,12 +185,15 @@ describe("isBetter: correctness first, then board quality, then effort", () => {
 })
 
 describe("board quality", () => {
-  const q: BoardQuality = { area_mm2: 200, detour: 1.2, vias: 3, parts: 5, bom_usd: 0.4 }
+  const q: BoardQuality = { area_mm2: 200, detour: 1.2, vias: 3, connections: 5, parts: 5, bom_usd: 0.4 }
 
-  test("boardRatio: identical boards are 1; half the area on one of five measures is 2^(1/5)", () => {
+  test("boardRatio: identical boards are 1; area counts double (half the area alone is 2^(2/6))", () => {
     assert.equal(boardRatio(q, q), 1)
-    assert.ok(Math.abs(boardRatio(q, { ...q, area_mm2: 100 }) - 2 ** (1 / 5)) < 1e-12)
-    assert.ok(boardRatio(q, { ...q, vias: 0 }) > 1, "via-free compares through vias + 1")
+    assert.ok(Math.abs(boardRatio(q, { ...q, area_mm2: 100 }) - 2 ** (2 / 6)) < 1e-12)
+    assert.ok(boardRatio(q, { ...q, vias: 0 }) > 1, "via-free compares through vias + connections")
+    // The live t01 case: 12% smaller board, one more via, slightly longer routing -> still better.
+    const t01 = { area_mm2: 238, detour: 1.07, vias: 1, connections: 5, parts: 5, bom_usd: 0.047 }
+    assert.ok(boardRatio(t01, { ...t01, area_mm2: 209, detour: 1.12, vias: 2 }) > 1)
     assert.throws(() => boardRatio(q, { ...q, bom_usd: 0 }), /bom_usd/)
   })
 

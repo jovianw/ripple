@@ -7,6 +7,8 @@ export interface BoardQuality {
   area_mm2: number;
   detour: number;
   vias: number;
+  /** Point-to-point connections the board has to make: Σ over nets of (ports − 1). Scales the via count. */
+  connections: number;
   parts: number;
   bom_usd: number;
 }
@@ -16,25 +18,32 @@ export interface RunQuality extends BoardQuality {
   /** Component footprint area ÷ board area (0..1). Display only: bigger footprints inflate it. */
   density: number;
   trace_mm: number;
-  /** Point-to-point connections the board has to make: Σ over nets of (ports − 1). */
-  connections: number;
 }
 
 /**
- * How much better `b` is than `a`, two boards for the same spec: the geometric mean of a/b over area, detour,
- * vias + 1 (so via-free boards compare), parts and BOM cost. Above 1 means b is better; 1.1 is "10% better".
+ * How each measure counts in boardRatio. Area counts double: a smaller board is the main goal, and the other
+ * measures move with it (a tighter board usually routes a little longer and may need a via).
+ */
+export const QUALITY_WEIGHTS = { area_mm2: 2, detour: 1, vias: 1, parts: 1, bom_usd: 1 } as const;
+
+/**
+ * How much better `b` is than `a`, two boards for the same spec: the weighted geometric mean of a/b over area,
+ * detour, vias, parts and BOM cost (QUALITY_WEIGHTS). Vias compare as vias + connections, so one extra via on a
+ * 5-connection board is a small cost, not a doubling, and via-free boards still compare. Above 1 means b is better;
+ * 1.1 is "10% better".
  */
 export function boardRatio(a: BoardQuality, b: BoardQuality): number {
-  const pairs: [string, number, number][] = [
+  const pairs: [keyof typeof QUALITY_WEIGHTS, number, number][] = [
     ["area_mm2", a.area_mm2, b.area_mm2],
     ["detour", a.detour, b.detour],
-    ["vias + 1", a.vias + 1, b.vias + 1],
+    ["vias", a.vias + a.connections, b.vias + b.connections],
     ["parts", a.parts, b.parts],
     ["bom_usd", a.bom_usd, b.bom_usd],
   ];
   for (const [name, x, y] of pairs)
     if (!(x > 0 && y > 0)) throw new Error(`boardRatio: ${name} must be positive (got ${x} and ${y})`);
-  return Math.exp(pairs.reduce((s, [, x, y]) => s + Math.log(x / y), 0) / pairs.length);
+  const total = pairs.reduce((s, [name]) => s + QUALITY_WEIGHTS[name], 0);
+  return Math.exp(pairs.reduce((s, [name, x, y]) => s + QUALITY_WEIGHTS[name] * Math.log(x / y), 0) / total);
 }
 
 export function median(xs: number[]): number {

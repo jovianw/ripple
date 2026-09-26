@@ -37,7 +37,9 @@ export type StoredRun = RunResult & {
   check_score?: number;
   /** Size, routing, part count and BOM of the compiled board (tools/metrics.ts). */
   quality?: RunQuality;
-  /** Set on the one run whose board was kept (the passing attempt). */
+  /** On `stage: "improve_critique"` runs: the edits the critic suggested for a passing board, and what they should gain. */
+  improve?: { edits: string[]; expected: string };
+  /** Set on the one run whose board was kept (the passing attempt, or the last adopted improve round). */
   final?: boolean;
   /** On `stage: "critique"` runs: the critic's diagnosis and the fix it gave the coder's next attempt. */
   critique?: {

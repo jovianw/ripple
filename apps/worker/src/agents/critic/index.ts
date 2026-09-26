@@ -3,6 +3,7 @@
 import { CRITIC_SCHEMA, CRITIC_SYSTEM, criticUserPrompt, type CriticInput, type CriticOutput } from "./prompt.js"
 
 export { CRITIC_SYSTEM, CRITIC_SCHEMA, criticUserPrompt, compactWhitelist, type CriticInput, type CriticOutput } from "./prompt.js"
+export { IMPROVE_SYSTEM, IMPROVE_SCHEMA, improveUserPrompt, runImprover, type ImproveInput, type ImproveOutput } from "./improve.js"
 
 export interface CriticDeps {
   /** Calls the critic's model with a JSON schema; returns the parsed JSON. */
