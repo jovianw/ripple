@@ -86,22 +86,19 @@ function toBoardMetrics(m: CoderResult["metrics"]): BoardMetrics {
 export async function runBoard(specId: string, config: HarnessConfig, opts: RunBoardOptions = {}): Promise<RunBoardResult> {
   const { boardId = randomUUID(), writeMemory = true, useMemory = true } = opts;
   const spec = opts.spec ?? findSpec(specId);
+  const checks = await loadChecks();
+  const expectedFor = (circuitJson: unknown) => (opts.expectedFor ? opts.expectedFor(circuitJson) : checks.loadExpected(specId));
 
   if (opts.cacheKey) {
     const cached = await col.boards.findOne(
       { cache_key: opts.cacheKey, harness_version: config.version, passed: true },
       { sort: { created_at: -1 } },
     );
-    if (cached) {
-      const run: RunResult = {
-        board_id: boardId,
-        harness_version: config.version,
-        stage: "cache_hit",
-        passed: true,
-        failures: [],
-        drc_errors: 0,
-        ts: new Date().toISOString(),
-      };
+    // harness_version only tracks the config: the checks, normalizer or coder can change under the same version.
+    // Re-grade the stored design against today's checks (no model calls) and serve it only if it still passes.
+    const recheck = cached ? await checks.runChecks(cached.circuit_json, expectedFor(cached.circuit_json), { board_id: boardId, harness_version: config.version }) : null;
+    if (cached && recheck?.passed) {
+      const run: RunResult = { ...recheck, stage: "cache_hit" };
       await col.runs.replaceOne({ _id: `${boardId}_1` }, run, { upsert: true });
       // A copy under this request's own board_id, not a pointer to the original: every other view
       // (`/boards/<id>`, the harness timeline) already assumes one board_id per request.
@@ -122,7 +119,6 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
     }
   }
 
-  const checks = await loadChecks();
   const expected = opts.expectedFor ? undefined : checks.loadExpected(specId);
   const completeCritic = createComplete("critic", config);
 
