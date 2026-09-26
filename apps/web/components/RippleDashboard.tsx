@@ -13,7 +13,6 @@ import { Telemetry } from "@/components/build/Telemetry";
 import { ComponentInspector } from "@/components/pcb/ComponentInspector";
 import { PCBViewport } from "@/components/pcb/PCBViewport";
 import { WorldHud } from "@/components/pcb/WorldHud";
-import { DEFAULT_PROMPT, DEMO_SNAPSHOTS } from "@/lib/demoSnapshots";
 import { buildSnapshotsFromBoard, type RealBoardPayload } from "@/lib/realRun";
 import { deriveMetrics } from "@/lib/metrics";
 import { diffPCBStates } from "@/lib/pcbDiff";
@@ -24,12 +23,13 @@ import type { RunDoc } from "@/lib/live";
 // A run is just a BuildSnapshot[]. It can come from the scripted walkthrough
 // or from a board Ripple actually built — the scene cannot tell the difference,
 // which is the point of the seam.
+/** Every board on this page is one Ripple actually built. */
 interface RunSource {
-  kind: "scripted" | "real";
   label: string;
 }
 
-const SCRIPTED: RunSource = { kind: "scripted", label: "scripted walkthrough" };
+const DEFAULT_PROMPT =
+  "A USB-C powered temperature sensor board with an ESP32.";
 
 // Which board's deliverables the finished run corresponds to. Becomes the real
 // board id once runs are persisted; the panel takes it as a prop either way.
@@ -65,12 +65,13 @@ export function RippleDashboard() {
   const [isRunning, setIsRunning] = useState(false);
   const [selected, setSelected] = useState<PCBComponent | null>(null);
   const [showDeliverables, setShowDeliverables] = useState(false);
-  const [snapshots, setSnapshots] = useState<BuildSnapshot[]>(DEMO_SNAPSHOTS);
+  const [snapshots, setSnapshots] = useState<BuildSnapshot[]>([]);
   // Non-null while a real build is in flight: what the worker is doing now.
   const [awaiting, setAwaiting] = useState<
     "submitting" | "queued" | "running" | null
   >(null);
-  const [source, setSource] = useState<RunSource>(SCRIPTED);
+  const [source, setSource] = useState<RunSource | null>(null);
+  const [buildError, setBuildError] = useState<string | null>(null);
 
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   // Timers read liveness from a ref so scrubbing never has to cancel the run:
@@ -126,6 +127,8 @@ export function RippleDashboard() {
     setSelected(null);
     setShowDeliverables(false);
     setAwaiting("submitting");
+    setBuildError(null);
+    setSource(null);
     setRequestId(null);
     setRequestNote(null);
     fetch("/api/spec", {
@@ -140,19 +143,17 @@ export function RippleDashboard() {
           setAwaiting("queued");
           return;
         }
-        // No worker path available — fall back, and label it honestly.
-        setRequestNote(`Real build not sent: ${json?.error ?? r.statusText}`);
+        // Nothing is faked in its place: say why, and stop.
+        setRequestNote(null);
         setAwaiting(null);
-        setSource({ kind: "scripted", label: "no worker — scripted walkthrough" });
-        play(DEMO_SNAPSHOTS);
+        setBuildError(json?.error ?? r.statusText ?? "the worker did not accept the request");
       })
       .catch(() => {
-        setRequestNote("Real build not sent: the server is unreachable");
+        setRequestNote(null);
         setAwaiting(null);
-        setSource({ kind: "scripted", label: "no worker — scripted walkthrough" });
-        play(DEMO_SNAPSHOTS);
+        setBuildError("the server is unreachable");
       });
-  }, [play, prompt, clearTimers]);
+  }, [prompt, clearTimers]);
 
   /**
    * The worker finished the specification that was submitted. Swap the
@@ -172,10 +173,8 @@ export function RippleDashboard() {
         ))?.runs ?? [];
 
       setAwaiting(null);
-      setSource({
-        kind: "real",
-        label: `real build · ${boardId.slice(0, 8)}`,
-      });
+      setBuildError(null);
+      setSource({ label: `real build · ${boardId.slice(0, 8)}` });
       play(
         buildSnapshotsFromBoard({
           spec: { _id: payload.board.spec_id ?? "free text", text: prompt },
@@ -196,9 +195,10 @@ export function RippleDashboard() {
     setCurrentIndex(-1);
     setSelected(null);
     setShowDeliverables(false);
-    setSnapshots(DEMO_SNAPSHOTS);
-    setSource(SCRIPTED);
+    setSnapshots([]);
+    setSource(null);
     setAwaiting(null);
+    setBuildError(null);
   }, [clearTimers]);
 
   const scrubTo = useCallback((index: number) => {
@@ -336,23 +336,18 @@ export function RippleDashboard() {
                 progress={progress}
                 totalSteps={snapshots.length}
               />
-              {/* Say plainly which of the two the viewer is looking at. */}
-              <div className="mt-2.5 text-[11px]">
-                <span
-                  className={source.kind === "real" ? "text-good" : "text-dim"}
-                >
-                  {source.kind === "real" ? "● " : "○ "}
-                </span>
-                <span className={source.kind === "real" ? "text-ink" : "text-dim"}>
-                  {source.label}
-                </span>
-              </div>
+              {source ? (
+                <div className="mt-2.5 text-[11px]">
+                  <span className="text-good">● </span>
+                  <span className="text-dim">{source.label}</span>
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="pointer-events-none absolute left-6 top-5 max-w-[22rem]">
               <div
                 className={`text-[20px] font-medium leading-tight ${
-                  awaiting ? "text-accent" : "text-dim"
+                  awaiting ? "text-accent" : buildError ? "text-bad" : "text-dim"
                 }`}
               >
                 {awaiting === "submitting"
@@ -361,12 +356,16 @@ export function RippleDashboard() {
                     ? "Queued for the worker"
                     : awaiting === "running"
                       ? "Designing on the worker"
-                      : "Idle"}
+                      : buildError
+                        ? "Build not started"
+                        : "Idle"}
               </div>
               <div className="mt-1.5 text-[12px] text-dim">
                 {awaiting
                   ? "Ripple is designing this board now. It renders here when the worker answers."
-                  : "Describe a board to begin synthesis."}
+                  : buildError
+                    ? buildError
+                    : "Describe a board to begin synthesis."}
               </div>
               {awaiting ? (
                 <div className="mt-3 h-px w-40 bg-hair">
