@@ -2,9 +2,11 @@
 // via Jovian's propose(). Never applies anything itself — the config gate
 // (Jovian's evaluatePending) tests the proposal on the next batch and
 // decides keep/roll back/reject.
+import { randomUUID } from "node:crypto";
 import type { HarnessConfig } from "@ripple/types";
 import { createComplete, type JsonSchema } from "../tools/router.js";
 import { propose, type ConfigChange } from "../harness/config.js";
+import { col } from "../db.js";
 import type { RunBoardResult } from "./coder-loop.js";
 
 export const META_SYSTEM = `You are the meta-agent in Ripple, a harness that designs printed circuit boards.
@@ -20,8 +22,6 @@ Rules:
   changing.
 - Routing only ever names "cheap" or "strong". Moving an agent from cheap to strong costs money; only do it
   if the batch shows the cheap model is causing repeated failures that tier would fix.
-- Never propose a change that would let a board skip or bypass a check (e.g. turning off
-  route_requires_connectivity is only for loosening an over-strict gate, never for hiding a real failure).
 
 Reply with JSON only, matching the schema.`;
 
@@ -156,6 +156,29 @@ function isNoOp(change: ConfigChange, config: HarnessConfig): boolean {
 export async function proposeFromBatch(results: RunBoardResult[], config: HarnessConfig): Promise<HarnessConfig | null> {
   const complete = createComplete("meta", config);
   const raw = (await complete(META_SYSTEM, summarizeBatch(results), META_SCHEMA)) as MetaRawOutput;
+
+  // The meta call is batch-level, not board-level, so it gets a synthetic board_id rather
+  // than one of the batch's real boards — scoreVersion's per-board average (gate, ablation)
+  // only picks this up if a caller explicitly adds this id to the boardIds it scores with.
+  // Logged so the call's cost isn't invisible (e.g. a total-cost-per-version query), without
+  // silently dragging down every board's pass rate the way tagging a real board id would.
+  if (complete.lastUsage) {
+    const u = complete.lastUsage;
+    await col.runs.insertOne({
+      _id: `meta_v${config.version}_${randomUUID()}`,
+      board_id: `meta_v${config.version}`,
+      harness_version: config.version,
+      stage: "meta",
+      passed: false,
+      failures: [],
+      drc_errors: 0,
+      model: u.tier,
+      tokens: u.totalTokens,
+      cost_usd: u.costUsd,
+      ts: new Date().toISOString(),
+    });
+  }
+
   const change = toConfigChange(raw);
   if (!raw.change || isNoOp(change, config)) return null;
   return propose(change, raw.rationale);

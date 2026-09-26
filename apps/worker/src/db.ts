@@ -21,9 +21,26 @@ export type StoredWorkItem = WorkItem & {
 // Memory documents carry a few fields beyond the shared draft shapes.
 export type StoredLesson = Lesson & { active: boolean; created_at: Date };
 export type StoredSubcircuit = Subcircuit & { description: string; created_at: Date };
-export type StoredRun = RunResult & { _id?: string; embedding?: number[]; failure_summary?: string };
+export type StoredRun = RunResult & {
+  _id?: string;
+  embedding?: number[];
+  failure_summary?: string;
+  /** Ids of lessons/subcircuits retrieved into the coder's context for this attempt (the "why?" view). */
+  lessons_used?: string[];
+  subcircuits_used?: string[];
+};
 /** A config version plus what the gate recorded when it decided. */
 export type StoredConfig = HarnessConfig & { gate_note?: string; decided_at?: string };
+/** One row of `npm run ablation`'s table (DESIGN.md §7), so Jack can show it instead of fixture data. */
+export interface StoredAblationRow {
+  setup: string;
+  harness_version: number;
+  checks_passed: number;
+  total: number;
+  avg_attempts: number;
+  avg_cost_usd: number;
+  ts: string;
+}
 
 const uri = process.env.MONGODB_URI;
 if (!uri) throw new Error("MONGODB_URI is not set; copy .env.example to .env");
@@ -36,6 +53,7 @@ export const COLLECTIONS = [
   "work_queue",
   "runs",
   "lessons",
+  "ablations",
 ] as const;
 
 export const client = new MongoClient(uri, { appName: "ripple-worker" });
@@ -49,6 +67,7 @@ export const col = {
   queue: db.collection<StoredWorkItem>("work_queue"),
   runs: db.collection<StoredRun>("runs"),
   lessons: db.collection<StoredLesson>("lessons"),
+  ablations: db.collection<StoredAblationRow>("ablations"),
 };
 
 export async function connect() {

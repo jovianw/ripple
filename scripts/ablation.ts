@@ -3,8 +3,9 @@
 // Needs OPENROUTER_API_KEY, VOYAGE_API_KEY, MONGODB_URI. writeMemory: false
 // throughout — held-out solutions never enter the subcircuit/lesson library.
 import specs from "../specs/specs.json" with { type: "json" };
-import { client } from "../apps/worker/src/db.ts";
+import { client, col } from "../apps/worker/src/db.ts";
 import { BASELINE, currentConfig } from "../apps/worker/src/harness/config.ts";
+import { scoreVersion } from "../apps/worker/src/harness/gate.ts";
 import { callModel } from "../apps/worker/src/tools/router.ts";
 import type { HarnessConfig, RunResult } from "@ripple/types";
 
@@ -12,6 +13,7 @@ import type { HarnessConfig, RunResult } from "@ripple/types";
 // because even `import type` walks the source file for resolution, which
 // hits the same tscircuit/fanout-solver problem as a value import (see below).
 interface RunBoardResult {
+  boardId: string;
   runResult: RunResult;
   attempts: number;
 }
@@ -20,6 +22,7 @@ interface RunBoardResult {
 // plain NodeNext resolution can't statically walk (see apps/worker/tsconfig.json's
 // moduleResolution/paths for the full story). Load them dynamically, like
 // green-check.ts does for db.ts and coder-loop.ts does for checks/index.ts.
+// gate.ts has no tscircuit dependency, so scoreVersion is imported statically above.
 const { runBatch, findSpec } = (await import(new URL("../apps/worker/src/agents/coder-loop.ts", import.meta.url).href)) as {
   runBatch: (specIds: string[], config: HarnessConfig, opts?: { writeMemory?: boolean; useMemory?: boolean }) => Promise<RunBoardResult[]>;
   findSpec: (id: string) => { text: string };
@@ -32,21 +35,11 @@ const HELD_OUT = (specs as { _id: string; split: string }[]).filter((s) => s.spl
 
 interface Row {
   setup: string;
+  harnessVersion: number;
   checksPassed: number;
   total: number;
   avgAttempts: number;
   avgCostUsd: number;
-}
-
-function toRow(setup: string, results: { passed: boolean; attempts: number; cost_usd?: number }[]): Row {
-  const total = results.length;
-  return {
-    setup,
-    checksPassed: results.filter((r) => r.passed).length,
-    total,
-    avgAttempts: results.reduce((s, r) => s + r.attempts, 0) / Math.max(1, total),
-    avgCostUsd: results.reduce((s, r) => s + (r.cost_usd ?? 0), 0) / Math.max(1, total),
-  };
 }
 
 /** No harness at all: one model call, minimal prompt, no whitelist, no rules, no retries. */
@@ -83,12 +76,36 @@ async function runBareModel(specId: string, config: HarnessConfig) {
   return { passed, attempts: 1, cost_usd };
 }
 
-async function runBareBatch(specIds: string[], config: HarnessConfig) {
-  return Promise.all(specIds.map((id) => runBareModel(id, config)));
+/** Bare model has no config version of its own (it never writes runs); "bare" is a label, not a real version. */
+function bareRow(setup: string, results: { passed: boolean; attempts: number; cost_usd?: number }[]): Row {
+  const total = results.length;
+  return {
+    setup,
+    harnessVersion: -1,
+    checksPassed: results.filter((r) => r.passed).length,
+    total,
+    avgAttempts: results.reduce((s, r) => s + r.attempts, 0) / Math.max(1, total),
+    avgCostUsd: results.reduce((s, r) => s + (r.cost_usd ?? 0), 0) / Math.max(1, total),
+  };
 }
 
-function boardRowInput(results: RunBoardResult[]) {
-  return results.map((r) => ({ passed: r.runResult.passed, attempts: r.attempts, cost_usd: r.runResult.cost_usd }));
+/**
+ * The harness rows use Jovian's scoreVersion — the same aggregation the gate uses — scoped to this
+ * batch's board ids, so cost is every run under those boards (every coder attempt, every critic call),
+ * not just the last attempt's coder cost.
+ */
+async function harnessRow(setup: string, config: HarnessConfig, results: RunBoardResult[]): Promise<Row> {
+  const boardIds = results.map((r) => r.boardId).filter(Boolean);
+  const scores = await scoreVersion(config.version, { boardIds });
+  if (!scores) throw new Error(`${setup}: no runs found for v${config.version} (boardIds: ${boardIds.join(", ")})`);
+  return {
+    setup,
+    harnessVersion: config.version,
+    checksPassed: Math.round(scores.checks_passed * scores.boards),
+    total: scores.boards,
+    avgAttempts: scores.attempts_per_board,
+    avgCostUsd: scores.cost_per_board_usd,
+  };
 }
 
 function printTable(rows: Row[]) {
@@ -101,6 +118,21 @@ function printTable(rows: Row[]) {
   }
 }
 
+async function storeRows(rows: Row[]) {
+  const ts = new Date().toISOString();
+  await col.ablations.insertMany(
+    rows.map((r) => ({
+      setup: r.setup,
+      harness_version: r.harnessVersion,
+      checks_passed: r.checksPassed,
+      total: r.total,
+      avg_attempts: r.avgAttempts,
+      avg_cost_usd: r.avgCostUsd,
+      ts,
+    })),
+  );
+}
+
 async function main() {
   console.log(`Held-out specs: ${HELD_OUT.join(", ")}`);
 
@@ -108,7 +140,7 @@ async function main() {
   if (vN.version === 0) console.warn("note: no evolved config has been kept yet, so the vN row runs v0's config (with learned memory)");
 
   console.log("\nRunning: bare model, no harness...");
-  const bare = await runBareBatch(HELD_OUT, vN);
+  const bare = await Promise.all(HELD_OUT.map((id) => runBareModel(id, vN)));
 
   // v0 is "loop + checks": baseline config and no learned memory (no lessons, no library subcircuits).
   console.log("Running: harness v0 (no memory)...");
@@ -118,12 +150,13 @@ async function main() {
   const vNResults = await runBatch(HELD_OUT, vN, { writeMemory: false });
 
   const rows = [
-    toRow("Bare model, no harness", bare),
-    toRow(`Harness v0`, boardRowInput(v0Results)),
-    toRow(`Harness v${vN.version} (evolved config, library, lessons)`, boardRowInput(vNResults)),
+    bareRow("Bare model, no harness", bare),
+    await harnessRow("Harness v0", BASELINE, v0Results),
+    await harnessRow(`Harness v${vN.version} (evolved config, library, lessons)`, vN, vNResults),
   ];
 
   printTable(rows);
+  await storeRows(rows);
   await client.close();
 }
 

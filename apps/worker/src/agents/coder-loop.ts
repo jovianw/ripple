@@ -124,7 +124,25 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
       };
     }
 
-    await col.runs.replaceOne({ _id: `${boardId}_${attempts}` }, runResult, { upsert: true });
+    await col.runs.replaceOne(
+      { _id: `${boardId}_${attempts}` },
+      { ...runResult, lessons_used: lessons.map((l) => l._id), subcircuits_used: subcircuits.map((s) => s._id) },
+      { upsert: true },
+    );
+    // Same shape as the finale's final board (docs/frontend-backend.md), one per attempt —
+    // insertOne with an auto _id, matching the finale pipeline's convention (planned-board.ts):
+    // boards accumulate one doc per attempt, consumers take the latest by created_at.
+    await col.boards.insertOne({
+      board_id: boardId,
+      kind: "single",
+      spec_id: specId,
+      harness_version: config.version,
+      source: source ?? "",
+      circuit_json: coderResult?.circuitJson ?? null,
+      passed: runResult.passed,
+      failures: runResult.failures,
+      created_at: new Date(),
+    });
 
     if (runResult.passed) break;
 
@@ -148,6 +166,25 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
       );
       criticResults.push(critic);
       previousFailure = [...critic.diagnosis.map((d) => `${d.check}: ${d.cause}`), ...critic.fix].join("\n");
+
+      // Log the critic's own model call so its cost isn't invisible to scoreVersion's
+      // per-board sum (attributed to this board — the repair it's fixing).
+      if (completeCritic.lastUsage) {
+        const u = completeCritic.lastUsage;
+        await col.runs.insertOne({
+          _id: `${boardId}_${attempts}_critique`,
+          board_id: boardId,
+          harness_version: config.version,
+          stage: "critique",
+          passed: false,
+          failures: [],
+          drc_errors: 0,
+          model: u.tier,
+          tokens: u.totalTokens,
+          cost_usd: u.costUsd,
+          ts: new Date().toISOString(),
+        });
+      }
     }
 
     previousFailures = runResult.failures;

@@ -123,13 +123,22 @@ export async function callModel({
   };
 }
 
+export type CompleteFn = ((system: string, user: string, schema: JsonSchema) => Promise<unknown>) & {
+  /** Usage from the most recent call, for callers that need to log its cost (e.g. critic/meta runs). */
+  lastUsage?: RouterCallResult;
+};
+
 /**
  * The critic and planner both take a `complete(system, user, schema) -> Promise<unknown>`
  * dependency (see CriticDeps/PlannerDeps) so they stay model-agnostic. Role and config
  * pick the tier the same way callModel does; bind them once per caller.
+ *
+ * The returned function also carries `.lastUsage` (model/tokens/cost from the most recent
+ * call) as a property, since CriticDeps/PlannerDeps only pass the parsed JSON back — callers
+ * that need to log the call's cost (e.g. as a `runs` document) read it from there afterward.
  */
-export function createComplete(role: AgentName, config: HarnessConfig) {
-  return async function complete(system: string, user: string, schema: JsonSchema): Promise<unknown> {
+export function createComplete(role: AgentName, config: HarnessConfig): CompleteFn {
+  const complete: CompleteFn = async (system, user, schema) => {
     const result = await callModel({
       role,
       config,
@@ -139,10 +148,12 @@ export function createComplete(role: AgentName, config: HarnessConfig) {
         { role: "user", content: user },
       ],
     });
+    complete.lastUsage = result;
     try {
       return JSON.parse(result.content);
     } catch (cause) {
       throw new Error(`${role} model returned non-JSON content: ${result.content.slice(0, 200)}`, { cause });
     }
   };
+  return complete;
 }
