@@ -292,6 +292,42 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 - [ ] **2:30–3:30** README, project description, demo script
 - [ ] **4:30–5:00** Lead video recording and submission
 
+### Who does what after 1:25 (no overlaps; freeze at 3:30)
+
+State at 1:25: everything is merged and `main` typechecks. `npm run green`, `smoke`, `test:*`, `queue:demo`, and
+`finale -- --stub` all pass (Windows too, after `.gitattributes`). `npm run evolve` works end to end: its first round
+rolled back "coder → strong" (0% pass at 37× cost). The critic has written 12 lessons (several near-duplicates). The web
+app reads Atlas at `/live`. It still can't submit a spec (read-only), and Vercel is missing its env vars.
+
+**Jovian**
+1. Vercel env vars `MONGODB_URI_READER`, `MONGODB_DB`, then redeploy (Jovian only).
+2. Spec requests: `spec_requests` collection + `npm run worker`, which watches it with a change stream, claims requests
+   atomically, and runs `runBoard` (or the finale pipeline for `finale`), writing `status` and `board_id` back. Resumes
+   unfinished requests on restart. Contract documented in `docs/frontend-backend.md`. Atlas: a `ripple_requester` user
+   with a custom role limited to insert/find on `ripple.spec_requests`.
+3. Lesson dedupe in `addLesson`: a lesson that nearly matches an existing one updates it instead of adding another.
+4. When Arjun's item 1 lands: `npm run evolve -- --rounds 2` on all training specs, aiming for a kept version with a new rule.
+
+**Arjun**
+1. Meta-agent input: put the most common failure *details* and the critic's new lessons into `summarizeBatch`, so it
+   proposes rules (which the gate can keep), not just a bigger model.
+2. Coder prompt: whitelist parts as `<chip name="U1" {...part.props} />`, never the part id as a JSX element
+   (`<temp_sensor_lm75>` failed in evolve).
+3. Ad-hoc specs: `runBoard` for free text with no spec id, graded on compile + DRC only and marked ungraded (for a
+   judge typing their own spec).
+4. After Jovian's evolve produces a kept version: `npm run ablation` (stores to `ablations`).
+
+**Marcos**
+1. One live `npm run finale` with the real planner and coder; kill it mid-run, resume, confirm it passes.
+2. Check the lessons after Jovian's dedupe against the critic's quality gate.
+3. 3:00: finale kill-and-resume rehearsal with Jovian; the demo script for the 3-minute run.
+
+**Jack**
+1. Prompt box → `POST /api/spec` that inserts `{ spec_id | text, status: "queued", created_at }` into `spec_requests`
+   using `MONGODB_URI_REQUESTS` (the `ripple_requester` user; server-side only). Show the request's `status` and link to
+   its `board_id` in `/live`.
+2. Config diff and ablation views from `harness_versions` / `ablations`.
+
 ### Who does what after 12:30 (no overlaps)
 
 State at 12:35: all pieces of the single-board loop are on `main`, but the 12:30 checkpoint has not passed yet. The only attempt (12:19) failed on the JLCPCB LED polarity DRC error, which `388dc2d` (parts engine off) fixed afterwards. Not wired yet: critic, router `complete` adapter, config passed into the loop.
