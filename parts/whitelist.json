@@ -13,7 +13,14 @@
       "exampleProps": {
         "resistance": "10k"
       },
-      "description": "Resistor, 0402. Pins: pin1, pin2."
+      "description": "Resistor, 0402. Pins: pin1, pin2.",
+      "footprint": {
+        "courtyard": [1.86, 0.94],
+        "pads": {
+          "pin1": [-0.51, 0],
+          "pin2": [0.51, 0]
+        }
+      }
     },
     {
       "id": "resistor_0603",
@@ -25,7 +32,14 @@
       "exampleProps": {
         "resistance": "10k"
       },
-      "description": "Resistor, 0603 (default). Pins: pin1, pin2."
+      "description": "Resistor, 0603 (default). Pins: pin1, pin2.",
+      "footprint": {
+        "courtyard": [2.96, 1.46],
+        "pads": {
+          "pin1": [-0.82, 0],
+          "pin2": [0.83, 0]
+        }
+      }
     },
     {
       "id": "resistor_0805",
@@ -37,7 +51,14 @@
       "exampleProps": {
         "resistance": "10k"
       },
-      "description": "Resistor, 0805. Pins: pin1, pin2."
+      "description": "Resistor, 0805. Pins: pin1, pin2.",
+      "footprint": {
+        "courtyard": [3.36, 1.9],
+        "pads": {
+          "pin1": [-0.91, 0],
+          "pin2": [0.91, 0]
+        }
+      }
     },
     {
       "id": "capacitor_0402",
@@ -49,7 +70,14 @@
       "exampleProps": {
         "capacitance": "100nF"
       },
-      "description": "Ceramic capacitor, 0402. Pins: pin1, pin2."
+      "description": "Ceramic capacitor, 0402. Pins: pin1, pin2.",
+      "footprint": {
+        "courtyard": [1.86, 0.94],
+        "pads": {
+          "pin1": [-0.51, 0],
+          "pin2": [0.51, 0]
+        }
+      }
     },
     {
       "id": "capacitor_0603",
@@ -61,7 +89,14 @@
       "exampleProps": {
         "capacitance": "100nF"
       },
-      "description": "Ceramic capacitor, 0603 (default for 100nF and 1uF). Pins: pin1, pin2."
+      "description": "Ceramic capacitor, 0603 (default for 100nF and 1uF). Pins: pin1, pin2.",
+      "footprint": {
+        "courtyard": [2.96, 1.46],
+        "pads": {
+          "pin1": [-0.82, 0],
+          "pin2": [0.83, 0]
+        }
+      }
     },
     {
       "id": "capacitor_0805",
@@ -73,7 +108,14 @@
       "exampleProps": {
         "capacitance": "10uF"
       },
-      "description": "Ceramic capacitor, 0805 (bulk up to 10uF). Pins: pin1, pin2."
+      "description": "Ceramic capacitor, 0805 (bulk up to 10uF). Pins: pin1, pin2.",
+      "footprint": {
+        "courtyard": [3.36, 1.9],
+        "pads": {
+          "pin1": [-0.91, 0],
+          "pin2": [0.91, 0]
+        }
+      }
     },
     {
       "id": "capacitor_1206",
@@ -85,7 +127,14 @@
       "exampleProps": {
         "capacitance": "22uF"
       },
-      "description": "Ceramic capacitor, 1206 (bulk). Pins: pin1, pin2."
+      "description": "Ceramic capacitor, 1206 (bulk). Pins: pin1, pin2.",
+      "footprint": {
+        "courtyard": [4.56, 2.26],
+        "pads": {
+          "pin1": [-1.46, 0],
+          "pin2": [1.46, 0]
+        }
+      }
     },
     {
       "id": "led_0603",
@@ -98,7 +147,14 @@
         "color": "red"
       },
       "description": "LED, 0603. Pins: anode, cathode.",
-      "notes": "Always needs its own series resistor. Vf ~2.0V red/green, ~3.0V blue."
+      "notes": "Always needs its own series resistor. Vf ~2.0V red/green, ~3.0V blue.",
+      "footprint": {
+        "courtyard": [2.96, 1.46],
+        "pads": {
+          "pin1": [-0.82, 0],
+          "pin2": [0.83, 0]
+        }
+      }
     },
     {
       "id": "led_0805",
@@ -111,7 +167,14 @@
         "color": "green"
       },
       "description": "LED, 0805. Pins: anode, cathode.",
-      "notes": "Always needs its own series resistor."
+      "notes": "Always needs its own series resistor.",
+      "footprint": {
+        "courtyard": [3.36, 1.9],
+        "pads": {
+          "pin1": [-0.91, 0],
+          "pin2": [0.91, 0]
+        }
+      }
     },
     {
       "id": "diode_sod123",
@@ -120,7 +183,14 @@
       "props": {
         "footprint": "sod123"
       },
-      "description": "Schottky diode, SOD-123 (e.g. B5819W). Pins: anode, cathode."
+      "description": "Schottky diode, SOD-123 (e.g. B5819W). Pins: anode, cathode.",
+      "footprint": {
+        "courtyard": [4.7, 2.3],
+        "pads": {
+          "pin1": [-1.65, 0],
+          "pin2": [1.65, 0]
+        }
+      }
     },
     {
       "id": "pushbutton_smd",
@@ -130,7 +200,16 @@
         "footprint": "pushbutton"
       },
       "description": "Tactile pushbutton, 4 pins.",
-      "notes": "pin1/pin2 are one side, pin3/pin4 the other."
+      "notes": "pin1/pin2 are one side, pin3/pin4 the other.",
+      "footprint": {
+        "courtyard": [7, 9],
+        "pads": {
+          "pin1": [-2.25, 3.25],
+          "pin2": [-2.25, -3.25],
+          "pin3": [2.25, -3.25],
+          "pin4": [2.25, 3.25]
+        }
+      }
     },
     {
       "id": "crystal_hc49",
@@ -143,7 +222,14 @@
       "exampleProps": {
         "frequency": "16MHz"
       },
-      "description": "Crystal, HC-49. Pins: pin1, pin2."
+      "description": "Crystal, HC-49. Pins: pin1, pin2.",
+      "footprint": {
+        "courtyard": [11.95, 5.66],
+        "pads": {
+          "pin1": [-2.44, 0],
+          "pin2": [2.44, 0]
+        }
+      }
     },
     {
       "id": "header_2",
@@ -154,7 +240,14 @@
         "footprint": "pinrow2"
       },
       "description": "Pin header 1x2, 2.54mm.",
-      "notes": "Set pinLabels to the labels the spec names, e.g. [\"3V3\",\"GND\"]."
+      "notes": "Set pinLabels to the labels the spec names, e.g. [\"3V3\",\"GND\"].",
+      "footprint": {
+        "courtyard": [6.08, 3.54],
+        "pads": {
+          "pin1": [-1.27, 0],
+          "pin2": [1.27, 0]
+        }
+      }
     },
     {
       "id": "header_3",
@@ -165,7 +258,15 @@
         "footprint": "pinrow3"
       },
       "description": "Pin header 1x3, 2.54mm.",
-      "notes": "Set pinLabels to the labels the spec names, e.g. [\"3V3\",\"GND\"]."
+      "notes": "Set pinLabels to the labels the spec names, e.g. [\"3V3\",\"GND\"].",
+      "footprint": {
+        "courtyard": [8.62, 3.54],
+        "pads": {
+          "pin1": [-2.54, 0],
+          "pin2": [0, 0],
+          "pin3": [2.54, 0]
+        }
+      }
     },
     {
       "id": "header_4",
@@ -176,7 +277,16 @@
         "footprint": "pinrow4"
       },
       "description": "Pin header 1x4, 2.54mm.",
-      "notes": "Set pinLabels to the labels the spec names, e.g. [\"3V3\",\"GND\"]."
+      "notes": "Set pinLabels to the labels the spec names, e.g. [\"3V3\",\"GND\"].",
+      "footprint": {
+        "courtyard": [11.16, 3.54],
+        "pads": {
+          "pin1": [-3.81, 0],
+          "pin2": [-1.27, 0],
+          "pin3": [1.27, 0],
+          "pin4": [3.81, 0]
+        }
+      }
     },
     {
       "id": "header_6",
@@ -187,7 +297,18 @@
         "footprint": "pinrow6"
       },
       "description": "Pin header 1x6, 2.54mm.",
-      "notes": "Set pinLabels to the labels the spec names, e.g. [\"3V3\",\"GND\"]."
+      "notes": "Set pinLabels to the labels the spec names, e.g. [\"3V3\",\"GND\"].",
+      "footprint": {
+        "courtyard": [16.24, 3.54],
+        "pads": {
+          "pin1": [-6.35, 0],
+          "pin2": [-3.81, 0],
+          "pin3": [-1.27, 0],
+          "pin4": [1.27, 0],
+          "pin5": [3.81, 0],
+          "pin6": [6.35, 0]
+        }
+      }
     },
     {
       "id": "usb_c_receptacle",
@@ -241,7 +362,28 @@
         "CC2": "CC2"
       },
       "description": "USB 2.0 Type-C receptacle, 16-pin mid-mount.",
-      "notes": "As a power sink: VBUS1+VBUS2 to 5V, GND1+GND2 (and SHIELD*) to GND, and CC1 and CC2 each to GND through its own 5.1k resistor. Pins 1-4 are the shell tabs; contacts follow the standard 16-pin order (GND, VBUS, SBU2, CC1, DN2, DP1, DN1, DP2, SBU1, CC2, VBUS, GND). Confirm against the datasheet before ordering."
+      "notes": "As a power sink: VBUS1+VBUS2 to 5V, GND1+GND2 (and SHIELD*) to GND, and CC1 and CC2 each to GND through its own 5.1k resistor. Pins 1-4 are the shell tabs; contacts follow the standard 16-pin order (GND, VBUS, SBU2, CC1, DN2, DP1, DN1, DP2, SBU1, CC2, VBUS, GND). Confirm against the datasheet before ordering.",
+      "footprint": {
+        "courtyard": [10.35, 8.4],
+        "pads": {
+          "SHIELD1": [-4.32, 1.58],
+          "SHIELD2": [4.33, 1.58],
+          "SHIELD3": [-4.32, -2.62],
+          "SHIELD4": [4.33, -2.62],
+          "GND1": [-3.2, 2.13],
+          "VBUS1": [-2.4, 2.13],
+          "SBU2": [-1.75, 2.13],
+          "CC1": [-1.25, 2.13],
+          "DN2": [-0.75, 2.13],
+          "DP1": [-0.25, 2.13],
+          "DN1": [0.25, 2.13],
+          "DP2": [0.75, 2.13],
+          "SBU1": [1.25, 2.13],
+          "CC2": [1.75, 2.13],
+          "VBUS2": [2.4, 2.13],
+          "GND2": [3.2, 2.13]
+        }
+      }
     },
     {
       "id": "ldo_3v3_ap2112k",
@@ -283,7 +425,17 @@
         "VOUT": "VOUT"
       },
       "description": "3.3V 600mA LDO, SOT-23-5, 2.5-6V in.",
-      "notes": "1uF on VIN and 1uF on VOUT, close to the pins. Tie EN to VIN to keep it on."
+      "notes": "1uF on VIN and 1uF on VOUT, close to the pins. Tie EN to VIN to keep it on.",
+      "footprint": {
+        "courtyard": [4.1, 3.4],
+        "pads": {
+          "VIN": [-1.14, 0.95],
+          "GND": [-1.14, 0],
+          "EN": [-1.14, -0.95],
+          "NC": [1.14, -0.95],
+          "VOUT": [1.14, 0.95]
+        }
+      }
     },
     {
       "id": "ldo_3v3_ams1117",
@@ -320,7 +472,16 @@
         "VOUT": "VOUT"
       },
       "description": "3.3V 1A LDO, SOT-223, 4.5-15V in.",
-      "notes": "TAB is internally VOUT; connect it to VOUT. 10uF on VIN and VOUT."
+      "notes": "TAB is internally VOUT; connect it to VOUT. 10uF on VIN and VOUT.",
+      "footprint": {
+        "courtyard": [8.8, 7.2],
+        "pads": {
+          "GND": [-3.15, 2.3],
+          "VOUT": [-3.15, 0],
+          "VIN": [-3.15, -2.3],
+          "TAB": [3.15, 0]
+        }
+      }
     },
     {
       "id": "temp_sensor_lm75",
@@ -362,7 +523,20 @@
         "A2": "A2"
       },
       "description": "LM75B I2C temperature sensor, SOIC-8, 2.8-5.5V.",
-      "notes": "Address 0x48 + A2..A0; tie each address pin to GND or VCC. 100nF on VCC. OS is open-drain; may be left unconnected."
+      "notes": "Address 0x48 + A2..A0; tie each address pin to GND or VCC. 100nF on VCC. OS is open-drain; may be left unconnected.",
+      "footprint": {
+        "courtyard": [5.8, 5.55],
+        "pads": {
+          "SDA": [-2.15, 1.91],
+          "SCL": [-2.15, 0.64],
+          "OS": [-2.15, -0.63],
+          "GND": [-2.15, -1.9],
+          "A2": [2.15, -1.9],
+          "A1": [2.15, -0.63],
+          "A0": [2.15, 0.64],
+          "VCC": [2.15, 1.91]
+        }
+      }
     },
     {
       "id": "humidity_sensor_sht40",
@@ -398,7 +572,16 @@
         "SCL": "SCL"
       },
       "description": "SHT40 I2C humidity and temperature sensor, DFN-4, 1.08-3.6V (not 5V tolerant).",
-      "notes": "Fixed address 0x44. 100nF on VDD."
+      "notes": "Fixed address 0x44. 100nF on VDD.",
+      "footprint": {
+        "courtyard": [2, 2],
+        "pads": {
+          "SDA": [-0.5, 0.4],
+          "SCL": [-0.5, -0.4],
+          "VDD": [0.5, -0.4],
+          "VSS": [0.5, 0.4]
+        }
+      }
     },
     {
       "id": "env_sensor_bme280",
@@ -448,7 +631,20 @@
         "SDO": "SDO"
       },
       "description": "BME280 I2C temperature/humidity/pressure sensor, LGA-8, 1.71-3.6V.",
-      "notes": "I2C mode: SDI=SDA, SCK=SCL, tie CSB to VDDIO, SDO to GND (0x76) or VDDIO (0x77). 100nF on VDD and VDDIO."
+      "notes": "I2C mode: SDI=SDA, SCK=SCL, tie CSB to VDDIO, SDO to GND (0x76) or VDDIO (0x77). 100nF on VDD and VDDIO.",
+      "footprint": {
+        "courtyard": [3, 3],
+        "pads": {
+          "GND": [-0.9, 0.33],
+          "CSB": [-0.9, -0.32],
+          "SDI": [-0.32, -0.9],
+          "SCK": [0.33, -0.9],
+          "SDO": [0.9, -0.32],
+          "VDDIO": [0.9, 0.33],
+          "GND2": [0.33, 0.9],
+          "VDD": [-0.32, 0.9]
+        }
+      }
     },
     {
       "id": "eeprom_24lc256",
@@ -491,7 +687,20 @@
         "WP": "WP"
       },
       "description": "24LC256 256Kbit I2C EEPROM, SOIC-8, 2.5-5.5V.",
-      "notes": "Address 0x50 + A2..A0; tie each address pin to a rail. Tie WP to GND to allow writes. 100nF on VCC."
+      "notes": "Address 0x50 + A2..A0; tie each address pin to a rail. Tie WP to GND to allow writes. 100nF on VCC.",
+      "footprint": {
+        "courtyard": [5.8, 5.55],
+        "pads": {
+          "A0": [-2.15, 1.91],
+          "A1": [-2.15, 0.64],
+          "A2": [-2.15, -0.63],
+          "VSS": [-2.15, -1.9],
+          "SDA": [2.15, -1.9],
+          "SCL": [2.15, -0.63],
+          "WP": [2.15, 0.64],
+          "VCC": [2.15, 1.91]
+        }
+      }
     },
     {
       "id": "mcu_attiny85",
@@ -533,7 +742,20 @@
         "SCK": "PB2_SCK_SCL"
       },
       "description": "ATtiny85 8-bit MCU, SOIC-8, 2.7-5.5V.",
-      "notes": "100nF on VCC. 10k pull-up on RESET. ISP header order: 1 MISO, 2 VCC, 3 SCK, 4 MOSI, 5 RESET, 6 GND. I2C (USI): SDA=PB0, SCL=PB2."
+      "notes": "100nF on VCC. 10k pull-up on RESET. ISP header order: 1 MISO, 2 VCC, 3 SCK, 4 MOSI, 5 RESET, 6 GND. I2C (USI): SDA=PB0, SCL=PB2.",
+      "footprint": {
+        "courtyard": [5.8, 5.55],
+        "pads": {
+          "PB5_RESET": [-2.15, 1.91],
+          "PB3": [-2.15, 0.64],
+          "PB4": [-2.15, -0.63],
+          "GND": [-2.15, -1.9],
+          "PB0_MOSI_SDA": [2.15, -1.9],
+          "PB1_MISO": [2.15, -0.63],
+          "PB2_SCK_SCL": [2.15, 0.64],
+          "VCC": [2.15, 1.91]
+        }
+      }
     },
     {
       "id": "mcu_stm32f030",
@@ -591,7 +813,32 @@
         "BOOT0": "BOOT0"
       },
       "description": "STM32F030F4 32-bit MCU, TSSOP-20, 2.4-3.6V.",
-      "notes": "VDD and VDDA to 3.3V with 100nF each; VSS to GND. BOOT0 to GND via 10k. I2C1: PA10=SDA, PA9=SCL. Debug header: SWDIO, SWCLK, NRST, 3V3, GND."
+      "notes": "VDD and VDDA to 3.3V with 100nF each; VSS to GND. BOOT0 to GND via 10k. I2C1: PA10=SDA, PA9=SCL. Debug header: SWDIO, SWCLK, NRST, 3V3, GND.",
+      "footprint": {
+        "courtyard": [6.26, 6],
+        "pads": {
+          "BOOT0": [-2.22, 2.25],
+          "PF0": [-2.22, 1.75],
+          "PF1": [-2.22, 1.25],
+          "NRST": [-2.22, 0.75],
+          "VDDA": [-2.22, 0.25],
+          "PA0": [-2.22, -0.25],
+          "PA1": [-2.22, -0.75],
+          "PA2": [-2.22, -1.25],
+          "PA3": [-2.22, -1.75],
+          "PA4": [-2.22, -2.25],
+          "PA5": [2.23, -2.25],
+          "PA6": [2.23, -1.75],
+          "PA7": [2.23, -1.25],
+          "PB1": [2.23, -0.75],
+          "VSS": [2.23, -0.25],
+          "VDD": [2.23, 0.25],
+          "PA9": [2.23, 0.75],
+          "PA10": [2.23, 1.25],
+          "SWDIO": [2.23, 1.75],
+          "SWCLK": [2.23, 2.25]
+        }
+      }
     }
   ]
 }

@@ -6,11 +6,11 @@ import type { CircuitJson } from "tscircuit";
 import { callModel, type ChatMessage } from "../tools/router.js";
 import { evaluateCircuitSource } from "../tools/evaluate.js";
 import { keepPlacement, normalizeCoderSource } from "../tools/normalize.js";
-import { settlePlacement } from "../tools/placement.js";
+import { placeParts, settlePlacement } from "../tools/placement.js";
 import { EvaluateError } from "../tools/evaluate.js";
 import { runDrc, type DrcResult } from "../tools/drc.js";
 import { computeMetrics, type CircuitMetrics } from "../tools/metrics.js";
-import { partsWhitelistPrompt } from "../tools/parts-whitelist.js";
+import { PLACEMENT_GUIDE, partsWhitelistPrompt } from "../tools/parts-whitelist.js";
 
 export interface CoderInput {
   specText: string;
@@ -60,6 +60,8 @@ part numbers, footprints, or invented components. Parts outside the
 whitelist will fail the design checks.
 
 ${partsWhitelistPrompt()}
+
+${PLACEMENT_GUIDE}
 
 Every component needs a unique "name" prop (e.g. name="R1"). Use the
 component's real value prop: resistors take "resistance" (e.g.
@@ -155,15 +157,19 @@ export async function runCoder(input: CoderInput): Promise<CoderResult> {
 
   let circuitJson: CircuitJson;
   try {
-    ({ circuitJson } = await evaluateCircuitSource(source));
-    // A repair pins every existing part; parts it adds or moves land wherever the model guessed (or nowhere),
-    // often on top of others. Fit just those at the nearest clear spot, and render again.
     if (input.previousSource) {
+      ({ circuitJson } = await evaluateCircuitSource(source));
+      // A repair pins every existing part; parts it adds or moves land wherever the model guessed (or nowhere),
+      // often on top of others. Fit just those at the nearest clear spot, and render again.
       const placed = settlePlacement(source, circuitJson, input.previousSource);
       if (placed !== source) {
         source = placed;
         ({ circuitJson } = await evaluateCircuitSource(source));
       }
+    } else {
+      // A new board: the coder's own coordinates overlap courtyards, so its parts are placed for it (tscircuit
+      // packs them, then each cap, resistor and LED goes beside the pin it's wired to).
+      ({ source, circuitJson } = (await placeParts(source, async (s) => (await evaluateCircuitSource(s)).circuitJson)) as { source: string; circuitJson: CircuitJson });
     }
   } catch (err) {
     if (!(err instanceof EvaluateError)) throw err;

@@ -72,8 +72,9 @@ ${headers ? `\nHeaders this subcircuit places, written exactly like this (keep p
 Shared nets: connect to the rest of the board ONLY through these named nets, with trace to="net.NAME":
 ${p.nets.length ? p.nets.map((n) => `- net.${n}`).join("\n") : "- (none: this subcircuit is the whole board)"}
 Do not add parts that belong to other subcircuits.
-Give every part an explicit pcbX/pcbY, at least 2mm apart. Do not set maxLength or any other trace constraint:
-place the parts, the autorouter routes. Do not use decouplingFor or decouplingTo on capacitors.
+Leave out pcbX/pcbY: parts are placed after you write the code, each cap, resistor and LED beside the pin it is
+wired to, so wire each one to the pin it serves (a decoupling cap to that chip's supply pin). Do not set maxLength
+or any other trace constraint: the autorouter routes. Do not use decouplingFor or decouplingTo on capacitors.
 Reference pins in traces as ".NAME > .PIN" (e.g. ".I2CS_R1 > .pin2"), never ".NAME.PIN".
 Name every component with the prefix ${prefix(key)}_ (e.g. ${prefix(key)}_R1, ${prefix(key)}_U1) so names stay unique on the assembled board.`
 }
@@ -87,6 +88,22 @@ export function boardModuleToGroup(source: string, key: string): string {
     .replace(open, `<group name="${key}">`)
     .replace(close, "</group>")
     .replace(/export\s+default\s+(function\s*\w*\s*)?/, (_m, fn) => (fn ? `export function ${pascal(key)}` : `export const ${pascal(key)} = `))
+}
+
+/**
+ * Caps, resistors, LEDs and diodes with no trace on any pin. tscircuit renders them without an error, and the gap
+ * only showed after assembly (the sensors' decoupling caps sat alone, so the chips had no cap near VCC); repair
+ * rounds didn't find it. Failing the step names the part, so the queue's retry tells the coder what to wire.
+ */
+export function unwiredParts(circuitJson: El[]): string[] {
+  const wired = new Set(circuitJson.filter((e) => e.type === "source_trace").flatMap((t) => (t.connected_source_port_ids as string[] | undefined) ?? []))
+  const portsOf = new Map<string, string[]>()
+  for (const sp of circuitJson.filter((e) => e.type === "source_port"))
+    portsOf.set(sp.source_component_id as string, [...(portsOf.get(sp.source_component_id as string) ?? []), sp.source_port_id as string])
+  return circuitJson
+    .filter((c) => c.type === "source_component" && ["simple_capacitor", "simple_resistor", "simple_led", "simple_diode"].includes(c.ftype as string))
+    .filter((c) => !(portsOf.get(c.source_component_id as string) ?? []).some((id) => wired.has(id)))
+    .map((c) => `${c.name} is not wired to anything: add a trace from each of its pins to the pin or net it serves`)
 }
 
 const now = () => new Date().toISOString()
@@ -244,7 +261,7 @@ export function plannedBoardHandler(spec: PlannedBoardSpec, config: HarnessConfi
       .filter((e) => e.type.endsWith("_error") && !deferred(e))
       .map((e) => `${e.type}: ${(e.message as string) ?? ""}`)
     // A repair may swap a part the plan chose (e.g. the wrong MCU for the header), so it isn't held to the plan's chips.
-    const problems = [...errors, ...checkInterface(p.repair ? { ...p, parts: [] } : p, out.circuitJson as never)]
+    const problems = [...errors, ...unwiredParts(out.circuitJson), ...checkInterface(p.repair ? { ...p, parts: [] } : p, out.circuitJson as never)]
     // A repair that used its last attempt keeps the block's previous version instead of blocking reassembly.
     // Show the coder its own header line when the header is wrong, so the retry can see what to change.
     if (problems.some((x) => x.startsWith("header ("))) {

@@ -20,6 +20,7 @@
     "test:assembler": "tsx --test apps/worker/src/assembler/assembler.test.ts",
     "test:gate": "MONGODB_URI=mongodb://127.0.0.1:1/unused tsx --test apps/worker/src/harness/gate.test.ts",
     "test:critic": "tsx --test apps/worker/src/agents/critic/critic.test.ts",
+    "test:placement": "tsx --test apps/worker/src/tools/placement.test.ts",
     "try:critic": "tsx --env-file-if-exists=.env scripts/try-critic.tsx",
     "test:planner": "tsx --test apps/worker/src/agents/planner/planner.test.tsx",
     "try:planner": "tsx --env-file-if-exists=.env scripts/try-planner.ts",
