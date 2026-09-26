@@ -2,12 +2,14 @@
 // maps the tier to a concrete OpenRouter model id (single place to swap
 // model ids), and makes the call. Agents never talk to OpenRouter directly.
 import type { AgentName, HarnessConfig, ModelTier } from "@ripple/types";
+import { Client as LangSmith } from "langsmith";
+import { traceable } from "langsmith/traceable";
 
-// Swap model ids here only. Confirmed cheap/strong pair for Ripple — see
-// report to Arjun for rationale.
+// MODEL_CHEAP/MODEL_STRONG in .env override these; the literals here are
+// only the fallback if the env vars aren't set.
 const MODEL_IDS: Record<ModelTier, string> = {
-  cheap: "openai/gpt-4o-mini",
-  strong: "anthropic/claude-sonnet-4.5",
+  cheap: process.env.MODEL_CHEAP || "openai/gpt-4o-mini",
+  strong: process.env.MODEL_STRONG || "anthropic/claude-sonnet-4.5",
 };
 
 export interface ChatMessage {
@@ -31,12 +33,11 @@ export interface RouterCallResult {
   costUsd?: number;
 }
 
-export async function callModel({ role, messages, config }: CallModelInput): Promise<RouterCallResult> {
+const langsmith = process.env.LANGSMITH_TRACING === "true" ? new LangSmith() : undefined;
+
+async function openRouterCall(model: string, messages: ChatMessage[]) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
-
-  const tier = config.routing[role];
-  const model = MODEL_IDS[tier];
 
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
@@ -55,7 +56,7 @@ export async function callModel({ role, messages, config }: CallModelInput): Pro
     throw new Error(`OpenRouter request failed: ${res.status} ${await res.text()}`);
   }
 
-  const data = (await res.json()) as {
+  return (await res.json()) as {
     model?: string;
     choices: { message: { content: string } }[];
     usage?: {
@@ -65,6 +66,25 @@ export async function callModel({ role, messages, config }: CallModelInput): Pro
       cost?: number;
     };
   };
+}
+
+export async function callModel({ role, messages, config }: CallModelInput): Promise<RouterCallResult> {
+  const tier = config.routing[role];
+  const model = MODEL_IDS[tier];
+
+  // Traced when LANGSMITH_TRACING=true (see green-check.ts for the same
+  // pattern); falls back to a plain call otherwise so tracing setup never
+  // blocks the router.
+  const call = langsmith
+    ? traceable((m: string, msgs: ChatMessage[]) => openRouterCall(m, msgs), {
+        name: `router:${role}`,
+        run_type: "llm",
+        client: langsmith,
+        project_name: process.env.LANGSMITH_PROJECT,
+      })
+    : openRouterCall;
+
+  const data = await call(model, messages);
 
   return {
     content: data.choices[0].message.content,

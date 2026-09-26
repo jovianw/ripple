@@ -7,6 +7,7 @@ import { callModel, type ChatMessage } from "../tools/router.js";
 import { evaluateCircuitSource } from "../tools/evaluate.js";
 import { runDrc, type DrcResult } from "../tools/drc.js";
 import { computeMetrics, type CircuitMetrics } from "../tools/metrics.js";
+import { partsWhitelistPrompt } from "../tools/parts-whitelist.js";
 
 export interface CoderInput {
   specText: string;
@@ -48,8 +49,12 @@ export default () => (
 Use only tscircuit's built-in JSX components (e.g. <board>, <resistor>,
 <capacitor>, <chip>, <trace>, <led>...). Do not import any npm package. Do
 not invent components or props that do not exist in tscircuit.
-Strongly prefer simple, well-known parts and standard footprints (e.g.
-0402, 0603) over unusual or exotic ones.
+
+You may ONLY use parts from the whitelist below — no other manufacturer
+part numbers, footprints, or invented components. Parts outside the
+whitelist will fail the design checks.
+
+${partsWhitelistPrompt()}
 
 Every component needs a unique "name" prop (e.g. name="R1"). Use the
 component's real value prop: resistors take "resistance" (e.g.
