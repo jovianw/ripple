@@ -119,7 +119,10 @@ export interface GateDecision {
  *   then "kept" if it scores better than its parent, else "rolled_back".
  * Returns null when nothing is pending. Every decision is stored on the version (scores, verdict, gate_note).
  */
-export async function evaluatePending(runBatch: RunBatch, opts: { store?: GateStore } = {}): Promise<GateDecision | null> {
+export async function evaluatePending(
+  runBatch: RunBatch,
+  opts: { store?: GateStore; /** a batch already run under the parent: scored instead of rerunning it */ parentBoardIds?: string[] } = {},
+): Promise<GateDecision | null> {
   const store = opts.store ?? defaultStore();
   const pending = await store.harness.findOne({ verdict: "pending" }, { sort: { version: 1 } });
   if (!pending) return null;
@@ -149,7 +152,10 @@ export async function evaluatePending(runBatch: RunBatch, opts: { store?: GateSt
 
   let parentScores = (parent.scores as Scores | undefined) ?? undefined;
   if (!parentScores) {
-    parentScores = await runAndScore(parent, runBatch, store);
+    const reused = opts.parentBoardIds?.length
+      ? await scoreVersion(parent.version, { boardIds: opts.parentBoardIds, store })
+      : null;
+    parentScores = reused ?? (await runAndScore(parent, runBatch, store));
     await store.harness.updateOne({ version: parent.version }, { $set: { scores: stripBoards(parentScores) } });
   }
   const scores = await runAndScore(candidate, runBatch, store);
