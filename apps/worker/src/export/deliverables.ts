@@ -91,8 +91,9 @@ export function boardMetrics(json: AnyCircuitElement[]): BoardMetrics {
   const height = board?.height ?? 0
   const partKey = (c: El) => c.manufacturer_part_number ?? `${c.ftype}:${c.resistance ?? c.capacitance ?? c.color ?? ""}`
   return {
-    width_mm: width,
-    height_mm: height,
+    // Board outlines come out of tscircuit as floats like 21.689999999999998.
+    width_mm: Math.round(width * 100) / 100,
+    height_mm: Math.round(height * 100) / 100,
     area_mm2: Math.round(width * height * 10) / 10,
     layers: board?.num_layers ?? 2,
     components: comps.length,

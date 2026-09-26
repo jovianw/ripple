@@ -36,6 +36,9 @@ function Stat({ label, value }: { label: string; value: string }) {
  * What the run actually produced: a manufacturable package, not a picture.
  * Opens over the world as the closing beat of a build.
  */
+/** 21.689999999999998 -> "21.69": boards saved before the exporter rounded still show clean sizes. */
+const mm = (v: number) => String(Math.round(v * 100) / 100);
+
 export function DeliverablesPanel({
   boardId,
   onClose,
@@ -147,7 +150,7 @@ export function DeliverablesPanel({
 
       {m ? (
         <div className="mt-3 flex shrink-0 flex-wrap gap-x-5 gap-y-1 px-6">
-          <Stat label="size" value={`${m.width_mm}×${m.height_mm}mm`} />
+          <Stat label="size" value={`${mm(m.width_mm)}×${mm(m.height_mm)}mm`} />
           <Stat label="area" value={`${m.area_mm2}mm²`} />
           <Stat label="layers" value={String(m.layers)} />
           <Stat label="parts" value={`${m.components} (${m.unique_parts} unique)`} />
