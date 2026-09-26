@@ -27,6 +27,7 @@ export function lessonProblem(l: { pattern: string; fix: string }): string | und
   const m = DESIGNATOR.exec(`${l.pattern} ${l.fix}`)
   if (m) return `names a specific part (${m[0]})`
   if (/\b[th]\d{2}_/.test(`${l.pattern} ${l.fix}`)) return "names a spec id"
+  if (/maxLength|max_length|maximum (trace )?length|trace length/i.test(l.fix)) return "sets a routing constraint"
   return undefined
 }
 

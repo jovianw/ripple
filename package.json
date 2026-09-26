@@ -25,7 +25,8 @@
     "export": "tsx scripts/export-board.tsx",
     "test:export": "tsx --test apps/worker/src/export/deliverables.test.tsx",
     "finale": "tsx --env-file-if-exists=.env scripts/finale-run.tsx",
-    "evolve": "tsx --env-file-if-exists=.env scripts/evolve.ts"
+    "evolve": "tsx --env-file-if-exists=.env scripts/evolve.ts",
+    "lessons": "tsx --env-file-if-exists=.env scripts/lessons.ts"
   },
   "devDependencies": {
     "@resvg/resvg-js": "2.6.2",
