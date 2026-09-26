@@ -1,5 +1,5 @@
 // Connectivity: every required net exists, and nets that must stay apart do.
-import type { CheckFailure } from "@board-forge/types"
+import type { CheckFailure } from "@ripple/types"
 import type { ExpectedChecks } from "../expected.ts"
 import type { Netlist } from "../netlist.ts"
 

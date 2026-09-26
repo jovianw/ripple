@@ -1,7 +1,7 @@
 // Netlist index over Circuit JSON: resolves "U1.VCC" pin refs and "VCC" net refs
 // to electrical nets (tscircuit's subcircuit_connectivity_map_key) and pad positions.
 import type { AnyCircuitElement } from "circuit-json"
-import type { NetRef, PinRef } from "./expected.ts"
+import type { NetRef, PinRef, TwoTerminalKind } from "./expected.ts"
 
 export interface PortInfo {
   ref: string; // "U1.VCC"
@@ -97,8 +97,37 @@ export class Netlist {
     return { ok: true, value: port };
   }
 
+  /** Human-readable form of a NetRef for messages. */
+  static refName(ref: NetRef): string {
+    return typeof ref === "string" ? ref : `${ref.any_pin_of}.*${ref.except?.length ? ` except ${ref.except.join(", ")}` : ""}`;
+  }
+
+  /** Any NetRef -> the set of candidate connectivity keys (one for plain refs). */
+  resolveNetSet(ref: NetRef): Resolved<string[]> {
+    if (typeof ref === "string") {
+      const r = this.resolveNet(ref);
+      return r.ok ? { ok: true, value: [r.value] } : r;
+    }
+    const comp = this.components.get(ref.any_pin_of);
+    if (!comp) return { ok: false, error: `no component named ${ref.any_pin_of} (have ${[...this.components.keys()].join(", ") || "none"})` };
+    const excluded = new Set<string>();
+    for (const ex of ref.except ?? []) {
+      const r = this.resolveNet(ex);
+      if (r.ok) excluded.add(r.value);
+    }
+    const keys = [...new Set(comp.ports.map((p) => p.net).filter((k): k is string => !!k && !excluded.has(k)))];
+    if (keys.length === 0) return { ok: false, error: `${Netlist.refName(ref)}: no candidate nets (is ${ref.any_pin_of} connected?)` };
+    return { ok: true, value: keys };
+  }
+
   /** "VCC" (named net) or "U1.VCC" (pin) -> connectivity key. */
   resolveNet(ref: NetRef): Resolved<string> {
+    if (typeof ref !== "string") {
+      const r = this.resolveNetSet(ref);
+      if (!r.ok) return r;
+      if (r.value.length !== 1) return { ok: false, error: `${Netlist.refName(ref)} matches ${r.value.length} nets; a single net is required here` };
+      return { ok: true, value: r.value[0] };
+    }
     if (ref.includes(".")) {
       const r = this.resolvePin(ref);
       if (!r.ok) return r;
@@ -126,6 +155,79 @@ export class Netlist {
   componentsOfType(ftype: string): ComponentInfo[] {
     return [...this.components.values()].filter((c) => c.ftype === ftype);
   }
+
+  /** Two-terminal parts of a kind, each reduced to its (a, b) terminal nets. For led/diode a = anode. */
+  twoTerminals(kind: TwoTerminalKind): TwoTerminal[] {
+    const pattern = KIND_FTYPE[kind];
+    const out: TwoTerminal[] = [];
+    for (const c of this.components.values()) {
+      if (!c.ftype || !pattern.test(c.ftype)) continue;
+      let a: PortInfo | undefined;
+      let b: PortInfo | undefined;
+      let aNets: (string | undefined)[];
+      let bNets: (string | undefined)[];
+      if (kind === "pushbutton") {
+        // pin1/pin2 are one contact, pin3/pin4 the other
+        const side1 = c.ports.filter((p) => p.hints.includes("pin1") || p.hints.includes("pin2"));
+        const side2 = c.ports.filter((p) => p.hints.includes("pin3") || p.hints.includes("pin4"));
+        aNets = side1.map((p) => p.net);
+        bNets = side2.map((p) => p.net);
+        a = side1[0];
+        b = side2[0];
+      } else {
+        a = c.ports.find((p) => p.hints.includes("anode")) ?? c.ports.find((p) => p.hints.includes("pin1")) ?? c.ports[0];
+        b = c.ports.find((p) => p.hints.includes("cathode")) ?? c.ports.find((p) => p.hints.includes("pin2")) ?? c.ports[1];
+        aNets = [a?.net];
+        bNets = [b?.net];
+      }
+      if (!a || !b) continue;
+      out.push({ comp: c, a, b, aNets: aNets.filter((n): n is string => !!n), bNets: bNets.filter((n): n is string => !!n), polarized: kind === "led" || kind === "diode" });
+    }
+    return out;
+  }
+}
+
+export interface TwoTerminal {
+  comp: ComponentInfo;
+  a: PortInfo;
+  b: PortInfo;
+  aNets: string[];
+  bNets: string[];
+  polarized: boolean;
+}
+
+const KIND_FTYPE: Record<TwoTerminalKind, RegExp> = {
+  resistor: /resistor$/,
+  capacitor: /capacitor$/,
+  led: /_led$/,
+  diode: /_diode$/,
+  pushbutton: /button/,
+};
+
+/** True when the part bridges nets a and b (either orientation unless polarized). */
+export function bridges(t: TwoTerminal, a: string, b: string): boolean {
+  const fwd = t.aNets.includes(a) && t.bNets.includes(b);
+  if (fwd) return true;
+  if (t.polarized) return false;
+  return t.aNets.includes(b) && t.bNets.includes(a);
+}
+
+/** Parallel combination of resistances; undefined when the list is empty. */
+export function parallel(ohms: number[]): number | undefined {
+  if (ohms.length === 0) return undefined;
+  return 1 / ohms.reduce((s, r) => s + 1 / r, 0);
+}
+
+export function fmtOhms(r: number): string {
+  if (r >= 1e6) return `${+(r / 1e6).toFixed(2)}M`;
+  if (r >= 1e3) return `${+(r / 1e3).toFixed(2)}k`;
+  return `${+r.toFixed(1)}`;
+}
+
+export function fmtFarads(f: number): string {
+  if (f >= 1e-6) return `${+(f * 1e6).toFixed(2)}uF`;
+  if (f >= 1e-9) return `${+(f * 1e9).toFixed(2)}nF`;
+  return `${+(f * 1e12).toFixed(1)}pF`;
 }
 
 export function distanceMm(a: { x?: number; y?: number }, b: { x?: number; y?: number }): number | undefined {

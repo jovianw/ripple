@@ -1,5 +1,5 @@
 // Decoupling: a capacitor from each chip's power pin to ground, within max_mm of the pin's pad.
-import type { CheckFailure } from "@board-forge/types"
+import type { CheckFailure } from "@ripple/types"
 import type { ExpectedChecks } from "../expected.ts"
 import { distanceMm, type Netlist } from "../netlist.ts"
 

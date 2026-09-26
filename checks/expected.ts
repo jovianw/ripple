@@ -2,12 +2,15 @@
 // exporting an ExpectedChecks object. These files are hidden from the agents.
 //
 // References:
+//   PinRef  "U1.VCC"   component name, dot, pin name / label / number ("R1.pin1", "R1.1")
 //   NetRef  "VCC"      a named net (<net name="VCC"/> or trace to="net.VCC")
 //           "U1.VCC"   the net that pin VCC of component U1 sits on
-//   PinRef  "U1.VCC"   component name, dot, pin name / label / number ("R1.pin1", "R1.1")
+//           { any_pin_of: "SW1", except: ["J1.GND"] }
+//                      any net touching a pin of SW1, minus the listed nets. A rule with a
+//                      wildcard side passes if any candidate net satisfies it.
 
-export type NetRef = string;
 export type PinRef = `${string}.${string}`;
+export type NetRef = string | { any_pin_of: string; except?: string[] };
 
 export interface RequiredNet {
   /** Label used in failure messages, e.g. "VCC" or "LED_ANODE". */
@@ -40,6 +43,71 @@ export interface DecouplingRule {
   min_farads?: number;
 }
 
+export type TwoTerminalKind = "resistor" | "capacitor" | "led" | "diode" | "pushbutton";
+
+/** A two-terminal part bridging nets a and b. For led/diode, a is the anode side. */
+export interface BetweenRule {
+  label: string;
+  kind: TwoTerminalKind;
+  a: NetRef;
+  b: NetRef;
+  min_ohms?: number;
+  max_ohms?: number;
+  min_farads?: number;
+  max_farads?: number;
+  /** Exact number of matching parts. Default: at least one. */
+  count?: number;
+}
+
+/** An LED with its own series resistor between rail (anode side) and gnd. */
+export interface SeriesLedRule {
+  label: string;
+  rail: NetRef;
+  gnd: NetRef;
+  min_ohms?: number;
+  max_ohms?: number;
+  /** Exact number of LEDs driven from rail. Default: at least one. */
+  count?: number;
+}
+
+/** A pin that must sit on one of the listed nets (not floating). */
+export interface TiedRule {
+  pin: PinRef;
+  to: NetRef[];
+}
+
+/** Resistive divider top -> out -> bottom. DC output computed from resistor values. */
+export interface DividerRule {
+  label: string;
+  top: NetRef;
+  bottom: NetRef;
+  out: NetRef;
+  vin: number;
+  vout_min: number;
+  vout_max: number;
+  min_total_ohms?: number;
+}
+
+/** Series R from in to out, C from out to gnd. tau = R*C, cutoff = 1 / (2*pi*tau). */
+export interface RcLowpassRule {
+  label: string;
+  in: NetRef;
+  out: NetRef;
+  gnd: NetRef;
+  min_tau_s?: number;
+  max_tau_s?: number;
+  min_cutoff_hz?: number;
+  max_cutoff_hz?: number;
+}
+
+/** I2C devices whose address (base + address-pin bits) must all differ. Pins are MSB first. */
+export interface DistinctAddressRule {
+  label: string;
+  high: NetRef;
+  low: NetRef;
+  devices: { chip: string; base: number; pins: string[] }[];
+}
+
 export interface ExpectedChecks {
   /** Connectivity: every required net exists. */
   nets?: RequiredNet[];
@@ -49,6 +117,15 @@ export interface ExpectedChecks {
   i2c?: I2cBus[];
   /** Decoupling: a capacitor near each chip's power pin. */
   decoupling?: DecouplingRule[];
+  /** Two-terminal parts that must bridge two nets (pull-ups, pull-downs, buttons...). */
+  between?: BetweenRule[];
+  /** LEDs with their own series resistor. */
+  series_led?: SeriesLedRule[];
+  /** Pins that must be tied to a rail. */
+  tied?: TiedRule[];
+  divider?: DividerRule[];
+  rc_lowpass?: RcLowpassRule[];
+  distinct_addresses?: DistinctAddressRule[];
   /** Routing and design rules. Always runs; max_errors defaults to 0. */
   drc?: { max_errors?: number };
 }
