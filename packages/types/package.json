@@ -1,0 +1,7 @@
+{
+  "name": "@board-forge/types",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts"
+}

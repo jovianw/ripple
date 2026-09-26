@@ -1,0 +1,8 @@
+{
+  "name": "@board-forge/worker",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@board-forge/types": "*"
+  }
+}

@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.next/
+*.tsbuildinfo
+
+# secrets and MCP config (never commit)
+.env
+.env.*
+!.env.example
+.mcp.json
+.cursor/
+.vscode/mcp.json
+
+.DS_Store
