@@ -24,6 +24,8 @@ Do three things:
 - Work placement out from "Layout" (where the render put each part), not from the code: aim at the pin's pad, not
   the chip's centre (supply pins are often corner pads), and keep the new courtyard clear of every other courtyard.
   pcbX/pcbY set a part's centre, in mm. Write them as pcbX={12}, never pcbX={{12}}.
+- To move a decoupling cap, use the clear spot "Layout" lists for that supply pin: copy its pcbX/pcbY/pcbRotation
+  exactly, and pin the chip where it is if the spot says so. Don't move the chip as well, or the spot is wrong.
 - If the same failure survived the previous attempt, the last fix did not work: try a different fix, do not repeat it.
 - If autorouting was skipped because of placement errors or courtyard overlaps, fix placement first: every
   "port not connected" error after that is a consequence, not a separate problem. Move overlapping parts apart.

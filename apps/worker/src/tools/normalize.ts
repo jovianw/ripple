@@ -26,6 +26,26 @@ export function withoutPlacement(source: string): string {
   return source.replace(/\s+(?:pcbX|pcbY|pcbRotation)=(?:"[^"]*"|'[^']*'|\{[^}]*\})/g, "")
 }
 
+const POSITION = /\s+(?:pcbX|pcbY|pcbRotation)=(?:"[^"]*"|'[^']*'|\{[^}]*\})/g
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+/**
+ * A repair edits code whose parts are all pinned (bakePlacement). If the coder drops a part's pcbX/pcbY while
+ * editing, that part lands at the origin on top of others; put back the position it had in `previous`.
+ */
+export function keepPlacement(source: string, previous: string): string {
+  let out = source
+  for (const tag of previous.match(/<[A-Za-z]+\b[^>]*?\bname=["'][^"']+["'][^>]*>/g) ?? []) {
+    const name = tag.match(/\bname=["']([^"']+)["']/)![1]
+    const attrs = (tag.match(POSITION) ?? []).join("")
+    if (!attrs) continue
+    const current = out.match(new RegExp(`<[A-Za-z]+\\b[^>]*?\\bname=["']${esc(name)}["'][^>]*>`))?.[0]
+    if (!current || /\bpcbX=/.test(current)) continue
+    out = out.replace(current, current.replace(/(\bname=["'][^"']+["'])/, `$1${attrs}`))
+  }
+  return out
+}
+
 type El = { type: string; [k: string]: any }
 const round2 = (n: number) => Math.round(n * 100) / 100
 

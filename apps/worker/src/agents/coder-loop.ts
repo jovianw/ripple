@@ -11,6 +11,7 @@ import { createComplete } from "../tools/router.js";
 import { runCoder, CoderCompileError, type CoderResult } from "./coder.js";
 import { runCritic, type CriticResult } from "./critic/index.js";
 import { describeLayout } from "./critic/layout.js";
+import { bakePlacement, withoutPlacement } from "../tools/normalize.js";
 import specs from "../../../../specs/specs.json" with { type: "json" };
 import finale from "../../../../specs/finale.json" with { type: "json" };
 
@@ -84,6 +85,8 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
   let previousFailure: string | undefined;
   let previousFailures: RunResult["failures"] | undefined;
   let source: string | undefined;
+  /** The code a repair starts from: the last attempt's, with the positions tscircuit chose written in. */
+  let repairSource: string | undefined;
   const criticResults: CriticResult[] = [];
   let attempts = 0;
   const maxAttempts = Math.max(1, config.workflow.repair_budget);
@@ -99,9 +102,12 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
         subcircuits,
         previousFailure: config.context.include_last_failure ? previousFailure : undefined,
         // Repairs edit the last attempt's code (including code that didn't compile) instead of starting over.
-        previousSource: config.context.include_last_failure && previousFailure ? source : undefined,
+        previousSource: config.context.include_last_failure && previousFailure ? repairSource : undefined,
       });
       source = coderResult.source;
+      // Auto-placed parts move whenever another part gets a position, which would make the critic's positions
+      // (and the layout's clear spots) wrong by the next render. Pinning where they are now keeps them valid.
+      repairSource = bakePlacement(withoutPlacement(source), coderResult.circuitJson as never);
       const checked = await checks.runChecks(coderResult.circuitJson, opts.expectedFor ? opts.expectedFor(coderResult.circuitJson) : expected, {
         board_id: boardId,
         harness_version: config.version,
@@ -117,6 +123,7 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
       if (!(err instanceof CoderCompileError)) throw err;
       coderResult = undefined;
       source = err.source;
+      repairSource = err.source;
       runResult = {
         board_id: boardId,
         harness_version: config.version,
@@ -161,7 +168,7 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
       const critic = await runCritic(
         {
           spec: { _id: spec._id, text: spec.text, split: spec.split },
-          code: source ?? "",
+          code: repairSource ?? source ?? "",
           result: runResult,
           previousFailures,
           lessons: lessons.map((l) => ({ _id: l._id, pattern: l.pattern, fix: l.fix })),

@@ -2,7 +2,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { evaluateCircuitSource } from "../../tools/evaluate.js"
-import { normalizeCoderSource } from "../../tools/normalize.js"
+import { keepPlacement, normalizeCoderSource } from "../../tools/normalize.js"
 import { describeLayout } from "./layout.js"
 import { criticUserPrompt } from "./prompt.js"
 
@@ -29,6 +29,32 @@ test("describeLayout gives each part's centre, placement, courtyard and supply p
   assert.doesNotMatch(u1, /SDA/)
   assert.match(u1, /courtyard x -?[\d.]+\.\.-?[\d.]+, y/)
   assert.match(c1, /no pcbX\/pcbY in the code; courtyard .*; pads pin1 \(.+\), pin2 \(.+\)/)
+})
+
+test("a cap placed at the suggested clear spot renders without overlaps, next to the pad", async () => {
+  const { circuitJson } = await evaluateCircuitSource(normalizeCoderSource(BOARD))
+  const spot = describeLayout(circuitJson).match(/- U1 VCC: pcbX=\{(-?[\d.]+)\} pcbY=\{(-?[\d.]+)\}( pcbRotation=\{90\})?, centre ([\d.]+)mm/)
+  assert.ok(spot, "a spot for U1 VCC")
+  assert.ok(Number(spot[4]) < 2.5, `spot is ${spot[4]}mm from the pad`)
+  const moved = BOARD.replace(
+    `<capacitor name="C1"`,
+    `<capacitor name="C1" pcbX={${spot[1]}} pcbY={${spot[2]}}${spot[3] ? " pcbRotation={90}" : ""}`,
+  )
+  const after = (await evaluateCircuitSource(normalizeCoderSource(moved))).circuitJson as { type: string }[]
+  const errors = after.filter((e) => /overlap|clearance/.test(e.type)).map((e) => e.type)
+  assert.deepEqual(errors, [])
+})
+
+test("keepPlacement restores a position the coder dropped, and leaves moved parts alone", () => {
+  const previous = `<pinheader name="HEADER" pcbX={-5.67} pcbY={-4.91} pcbRotation={-90} pinCount={4} />
+    <capacitor name="C2" pcbX={-5.38} pcbY={2.4} capacitance="100nF" />`
+  const edited = `<pinheader name="HEADER" pinCount={4} />
+    <capacitor name="C2" pcbX={3.8} pcbY={1.91} pcbRotation={90} capacitance="100nF" />
+    <resistor name="R9" resistance="1k" />`
+  const out = keepPlacement(edited, previous)
+  assert.match(out, /<pinheader name="HEADER" pcbX=\{-5\.67\} pcbY=\{-4\.91\} pcbRotation=\{-90\} pinCount=\{4\} \/>/)
+  assert.match(out, /<capacitor name="C2" pcbX=\{3\.8\} pcbY=\{1\.91\} pcbRotation=\{90\}/)
+  assert.match(out, /<resistor name="R9" resistance="1k" \/>/)
 })
 
 test("describeLayout is empty when there is no render", () => {
