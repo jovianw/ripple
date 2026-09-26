@@ -5,7 +5,14 @@
     "declaration": false,
     "noEmit": true,
     "allowImportingTsExtensions": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["."]
+  "include": [
+    "."
+  ],
+  "exclude": [
+    "*.tsx"
+  ]
 }

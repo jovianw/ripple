@@ -1,0 +1,26 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "composite": false,
+    "allowImportingTsExtensions": true,
+    "types": [
+      "tscircuit",
+      "node"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ESNext",
+    "lib": [
+      "ESNext",
+      "DOM"
+    ],
+    "resolveJsonModule": true
+  },
+  "include": [
+    "scripts/*.tsx",
+    "examples",
+    "checks/reference"
+  ]
+}
