@@ -218,8 +218,8 @@ export async function buildBoardViews(json: AnyCircuitElement[], name: string, s
   const add = async (path: string, category: Category, description: string, make: () => string | Promise<string>) => {
     try { made.push({ path, category, description, content: await make() }) } catch { /* left out of the manifest */ }
   }
-  await add("images/pcb.svg", "image", "PCB layout, top view", () => convertCircuitJsonToPcbSvg(json))
-  await add("images/schematic.svg", "image", "Schematic", () => convertCircuitJsonToSchematicSvg(json))
+  await add("images/pcb.svg", "image", "PCB layout, top view", () => pcbSvg(json))
+  await add("images/schematic.svg", "image", "Schematic", () => schematicSvg(json))
   await add("assembly/bom.csv", "assembly", "Bill of materials with manufacturer part numbers", async () => convertBomRowsToCsv(await bomRows(json)))
   await add("netlist.csv", "data", "Every net and the component pins on it", () => netlistCsv(json))
   return {
@@ -232,6 +232,23 @@ export async function buildBoardViews(json: AnyCircuitElement[], name: string, s
     files: made.map(({ path, content }) => ({ path, content })),
   }
 }
+
+/**
+ * Adds viewBox="0 0 W H" when the SVG only has width/height, so it scales to whatever box shows it (an <img> sized
+ * by CSS clips an SVG without a viewBox instead of shrinking it).
+ */
+export function withViewBox(svg: string): string {
+  return svg.replace(/<svg\b[^>]*>/, (tag) => {
+    if (/\bviewBox=/.test(tag)) return tag
+    const w = tag.match(/\bwidth="([\d.]+)"/)?.[1], h = tag.match(/\bheight="([\d.]+)"/)?.[1]
+    return w && h ? tag.replace(/^<svg\b/, `<svg viewBox="0 0 ${w} ${h}"`) : tag
+  })
+}
+
+/** The PCB drawn at the board's own aspect ratio (the default 800x600 frame left most of it empty around a tall board). */
+const pcbSvg = (json: AnyCircuitElement[]) =>
+  withViewBox(convertCircuitJsonToPcbSvg(json, { matchBoardAspectRatio: true, width: 1200 }))
+const schematicSvg = (json: AnyCircuitElement[]) => withViewBox(convertCircuitJsonToSchematicSvg(json))
 
 function png(svg: string, width = 1600): Uint8Array {
   return new Resvg(svg, { fitTo: { mode: "width", value: width }, background: "#ffffff" }).render().asPng()
@@ -286,12 +303,12 @@ export async function buildDeliverables(input: DeliverablesInput): Promise<Deliv
   })
 
   await attempt("images/", () => {
-    const pcbSvg = convertCircuitJsonToPcbSvg(json)
-    add("images/pcb.svg", "image", "PCB layout, top view", pcbSvg)
-    add("images/pcb.png", "image", "PCB layout, top view (PNG)", png(pcbSvg))
+    const pcb = pcbSvg(json)
+    add("images/pcb.svg", "image", "PCB layout, top view", pcb)
+    add("images/pcb.png", "image", "PCB layout, top view (PNG)", png(pcb))
   })
   await attempt("images/schematic", () => {
-    const schSvg = convertCircuitJsonToSchematicSvg(json)
+    const schSvg = schematicSvg(json)
     add("images/schematic.svg", "image", "Schematic", schSvg)
     add("images/schematic.png", "image", "Schematic (PNG)", png(schSvg))
   })
