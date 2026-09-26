@@ -1,21 +1,13 @@
-// Frozen contracts (DESIGN.md §4). Everything builds against these two shapes;
+// Shared contracts. HarnessConfig and RunResult are frozen at kickoff (DESIGN.md §4);
 // change them only with the whole team's agreement.
 
-export type AgentRole = "planner" | "coder" | "critic" | "meta";
 export type ModelTier = "cheap" | "strong";
+export type AgentName = "planner" | "coder" | "critic" | "meta";
+export type Verdict = "kept" | "rolled_back" | "rejected" | "pending";
 
-export type Verdict = "baseline" | "testing" | "kept" | "rolled_back" | "rejected";
-
-export interface HarnessScores {
-  checks_passed: number; // fraction of hidden checks passed, 0..1
-  attempts_per_board: number;
-  cost_per_board_usd: number;
-}
-
-/** One document per version in `harness_versions`. Never updated in place except for scores/verdict. */
 export interface HarnessConfig {
   version: number;
-  parent: number | null; // null only for the baseline
+  parent: number | null;
   rules: string[];
   context: {
     subcircuits_k: number;
@@ -25,33 +17,25 @@ export interface HarnessConfig {
   };
   tools: {
     route_requires_connectivity: boolean;
-    parts_whitelist: string; // whitelist version id
-    mcp: Record<AgentRole, string[]>; // read-only MCP tools each agent may call, e.g. ["find", "aggregate"]
+    parts_whitelist: string;
+    mcp: Record<AgentName, string[]>;
   };
   workflow: {
     plan_first: boolean;
     repair_budget: number;
     split_over_parts: number;
   };
-  routing: Record<AgentRole, ModelTier>;
-  scores?: HarnessScores; // set by the config gate after a test batch
+  routing: Record<AgentName, ModelTier>;
+  scores?: {
+    checks_passed: number;
+    attempts_per_board: number;
+    cost_per_board_usd: number;
+  };
   verdict: Verdict;
   rationale: string;
 }
 
-export type RunStage =
-  | "plan"
-  | "write"
-  | "compile"
-  | "route"
-  | "drc"
-  | "checks"
-  | "critique"
-  | "meta"
-  | "mcp"
-  | "final";
-
-export interface RunFailure {
+export interface CheckFailure {
   check: string;
   detail: string;
 }
@@ -63,21 +47,61 @@ export interface BoardMetrics {
   bom_usd: number;
 }
 
-/** One document per model call or tool result in `runs`. Every tool returns this shape. */
 export interface RunResult {
-  _id?: string; // sha1(board_id:step:attempt), written with upsert so replays overwrite
   board_id: string;
   harness_version: number;
-  stage: RunStage;
-  attempt: number;
+  stage: string;
   passed: boolean;
-  failures: RunFailure[];
-  drc_errors?: number;
+  failures: CheckFailure[];
+  drc_errors: number;
   metrics?: BoardMetrics;
-  agent?: AgentRole;
   model?: ModelTier;
-  model_id?: string; // concrete OpenRouter model the tier resolved to
   tokens?: number;
   cost_usd?: number;
-  ts: Date;
+  ts: string; // ISO 8601
+}
+
+// Draft shapes below come from the data model table and can still change at kickoff.
+
+export interface Spec {
+  _id: string;
+  text: string;
+  split: "train" | "held_out"; // never contains check contents
+}
+
+export interface Board {
+  _id: string;
+  spec_id: string;
+  harness_version: number;
+  code: string; // tscircuit source
+  circuit_json?: unknown;
+  metrics?: BoardMetrics;
+  subcircuits_used: string[];
+}
+
+export interface Subcircuit {
+  _id: string;
+  name: string;
+  code: string;
+  embedding: number[];
+  checks_passed: string[];
+  reuse_count: number;
+}
+
+export interface Lesson {
+  _id: string;
+  pattern: string;
+  fix: string;
+  embedding: number[];
+  times_helped: number;
+}
+
+export type WorkItemStatus = "pending" | "running" | "done" | "failed";
+
+export interface WorkItem {
+  _id: string;
+  board_id: string;
+  status: WorkItemStatus;
+  depends_on: string[];
+  heartbeat?: string; // ISO 8601
 }

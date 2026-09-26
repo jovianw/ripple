@@ -1,25 +1,14 @@
-# Secrets: never commit
+node_modules/
+dist/
+.next/
+*.tsbuildinfo
+
+# secrets and MCP config (never commit)
 .env
 .env.*
 !.env.example
-
-# MCP configs hold connection strings
 .mcp.json
 .cursor/
 .vscode/mcp.json
 
-# Claude Code local settings
-.claude/settings.local.json
-
-node_modules/
-dist/
-.next/
-out/
-*.tsbuildinfo
 .DS_Store
-Thumbs.db
-*.log
-
-# tscircuit parts cache and snapshots
-.tscircuit/
-__snapshots__/

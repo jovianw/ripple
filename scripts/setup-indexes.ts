@@ -1,8 +1,8 @@
 // Creates collections, regular indexes and vector indexes. Safe to re-run.
 // M0 allows only 3 search indexes per cluster, so vector indexes go on subcircuits, lessons and runs.
-import { client, col, connect, COLLECTIONS, db } from "../apps/worker/src/db";
+import { client, col, connect, COLLECTIONS, db } from "../apps/worker/src/db.ts";
 
-const dims = Number(process.env.VOYAGE_DIMS ?? 1024);
+const dims = Number(process.env.VOYAGE_DIMS || 1024); // voyage-4 default
 
 await connect();
 
