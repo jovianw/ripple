@@ -56,6 +56,7 @@ Check tscircuit works: `npm run smoke` renders `examples/led-board.tsx` through 
 | `npm run export <board>` | All deliverables (Gerbers, BOM, KiCad, 3D, images, report) to `out/<board>/` and zips |
 | `npm run test:planner` / `test:assembler` / `test:export` | Planner, assembler, deliverables tests |
 | `npm run try:critic` / `try:planner` | One real model call each (cheap model, ~1 cent) |
+| `npm run lessons` | List lessons; `-- retire <id> "<why>"` stops using one (kept in Atlas), `-- restore <id>` brings it back |
 | `npm run finale -- --stub [--reset]` | Finale through the durable queue with stand-in planner + coder (no model calls). Ctrl+C mid-run, rerun: it resumes. Writes deliverables to `out/<board>/` and zips |
 | `npm run finale -- --stub --clean` | Delete the finale board from Atlas without running (do this before recording) |
 | `npm run finale` | Same with the real planner and coder (cheap model) |

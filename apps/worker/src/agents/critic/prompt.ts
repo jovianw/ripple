@@ -20,6 +20,9 @@ Do three things:
 - Placement fixes: say where to move the part relative to the pin it serves, with a target pcbX/pcbY.
   A decoupling capacitor goes within 2mm of the power pin it serves, on the same side of the chip.
 - If the same failure survived the previous attempt, the last fix did not work: try a different fix, do not repeat it.
+- If autorouting was skipped because of placement errors or courtyard overlaps, fix placement first: every
+  "port not connected" error after that is a consequence, not a separate problem. Move overlapping parts apart.
+- Never add trace constraints (maxLength, trace widths): the autorouter handles routing.
 - Set "escalate" to true, with a reason, when the fix needs a different architecture: a wrong or missing part,
   a missing functional block, or a board that cannot route. The planner then re-plans.
 
@@ -29,8 +32,11 @@ A lesson is a design rule that would have prevented this failure on any board, n
   "Any I2C bus", "A USB-C receptacle used as a power sink", "Any IC with a supply pin".
 - "fix": what to do, with values, and the physical reason ("otherwise ...").
 - One idea per lesson. No component names (U3, R1), spec ids, or coordinates.
-- If a lesson in the context already covers this failure, do not write a new one: list its id in
-  "lessons_ignored" (the coder had it and did not follow it).
+- Use the numbers the failure gives. If a check says "within 3mm", the lesson says 3mm (or a small margin such
+  as 2mm), never a stricter limit you made up. Don't claim how tools behave unless the failure says so.
+- Never turn a lesson into a routing constraint (maximum trace length, trace width).
+- If a lesson in the context already covers this failure, even worded differently, do not write a new one:
+  list its id in "lessons_ignored" (the coder had it and did not follow it).
 - A typo or a one-off slip (misspelled pin name, wrong trace target) gets a fix but no lesson.
 
 Good lesson:
@@ -40,6 +46,8 @@ Bad lessons:
   "R2 should be 5.1k" (names a part, no situation, no reason)
   "Fix the CC failure on the USB board" (not a rule)
   "Follow good design practice for USB" (not actionable)
+  "Place the decoupling cap within 1mm; autorouters enforce a 1mm maximum trace length" (stricter number than
+  the check asked for, and a made-up tool behavior; the coder turned it into a trace limit and routing failed)
 
 Reply with JSON only, matching the schema.`
 
