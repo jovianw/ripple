@@ -73,9 +73,14 @@ export function RealBuildStatus({
         {label}
       </span>
       {req?.board_id ? (
-        <Link href={`/boards/${req.board_id}`} className="font-mono text-ghost hover:text-accent">
-          open board
-        </Link>
+        <>
+          <Link href={`/boards/${req.board_id}`} className="font-mono text-ghost hover:text-accent">
+            open board
+          </Link>
+          <Link href={`/harness?board=${encodeURIComponent(req.board_id)}`} className="text-ghost hover:text-accent">
+            harness logs
+          </Link>
+        </>
       ) : null}
       <Link href="/system" className="text-ghost hover:text-accent">
         system

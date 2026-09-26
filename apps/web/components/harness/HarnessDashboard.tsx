@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { NavTabs } from "@/components/NavTabs";
 
@@ -36,16 +36,26 @@ interface Snapshot {
   versions: HarnessDoc[];
   lessons: LessonDoc[];
   subcircuits: SubcircuitDoc[];
+  /** Every board's id, most recently created first — from /api/boards, independent of which board's runs we scoped below. */
+  boardIds: string[];
   connected: boolean;
 }
 
-async function loadAll(): Promise<Snapshot> {
-  const [health, runs, harness, memory, queue] = await Promise.all([
+/**
+ * `boardId` scopes the runs/queue fetch server-side when given (a specific board someone is watching), instead of
+ * pulling the last 200 runs system-wide and filtering client-side: with several people's boards interleaving, that
+ * global window can push a board's own early runs out entirely before this ever sees them. The board list still
+ * comes from the small, always-unscoped /api/boards, so the picker below can offer any board regardless of scope.
+ */
+async function loadAll(boardId: string | null): Promise<Snapshot> {
+  const scope = boardId ? `board_id=${encodeURIComponent(boardId)}&` : "";
+  const [health, runs, harness, memory, queue, boards] = await Promise.all([
     getJson<{ connected?: boolean }>("/api/health"),
-    getJson<{ runs?: RunDoc[] }>("/api/runs?limit=200"),
+    getJson<{ runs?: RunDoc[] }>(`/api/runs?${scope}limit=200`),
     getJson<{ versions?: HarnessDoc[] }>("/api/harness"),
     getJson<{ lessons?: LessonDoc[]; subcircuits?: SubcircuitDoc[] }>("/api/memory"),
-    getJson<{ items?: QueueItemDoc[] }>("/api/queue"),
+    getJson<{ items?: QueueItemDoc[] }>(`/api/queue${boardId ? `?${scope}` : ""}`),
+    getJson<{ boards?: { board_id: string }[] }>("/api/boards"),
   ]);
 
   return {
@@ -54,33 +64,28 @@ async function loadAll(): Promise<Snapshot> {
     versions: harness?.versions ?? [],
     lessons: memory?.lessons ?? [],
     subcircuits: memory?.subcircuits ?? [],
+    boardIds: (boards?.boards ?? []).map((b) => b.board_id),
     connected: health?.connected === true,
   };
 }
 
-export function HarnessDashboard() {
-  const { data, error, paused, togglePause } = usePolling(loadAll, POLL_MS);
-  const [boardId, setBoardId] = useState<string | null>(null);
+export function HarnessDashboard({ sessionBoardId = null }: { sessionBoardId?: string | null } = {}) {
+  // Starts on the board this session actually submitted (from the URL), so opening /harness right after a build
+  // shows that build's own activity — not whichever board happens to be most recently active system-wide, which
+  // could easily be someone else's once more than one person is using this at once.
+  const [boardId, setBoardId] = useState<string | null>(sessionBoardId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const load = useCallback(() => loadAll(boardId), [boardId]);
+  const { data, error, paused, togglePause } = usePolling(load, POLL_MS);
 
   // Memoised so the `?? []` fallback does not produce a new array identity on
   // every render and invalidate everything downstream.
   const runs = useMemo(() => data?.runs ?? [], [data]);
   const queue = useMemo(() => data?.queue ?? [], [data]);
   const versions = useMemo(() => data?.versions ?? [], [data]);
+  const boards = useMemo(() => data?.boardIds ?? [], [data]);
 
-  // Boards, most recently active first; the newest is the default focus.
-  const boards = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const r of runs) {
-      const prev = seen.get(r.board_id);
-      if (!prev || r.ts > prev) seen.set(r.board_id, r.ts);
-    }
-    return [...seen.entries()]
-      .sort((a, b) => b[1].localeCompare(a[1]))
-      .map(([id]) => id);
-  }, [runs]);
-
+  // Falls back to the most recently created board only when nobody asked for a specific one.
   const activeBoard = boardId ?? boards[0] ?? null;
 
   const boardRuns = useMemo(
