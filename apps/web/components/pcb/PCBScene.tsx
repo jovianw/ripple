@@ -123,10 +123,10 @@ export function PCBScene({
 
       {/* Low ambient so the key light does the shaping and the board keeps
           its contrast against the dark surround. */}
-      <ambientLight intensity={0.6} />
+      <ambientLight intensity={0.85} />
       <directionalLight
         position={[5.5, 11, 7]}
-        intensity={2.1}
+        intensity={2.6}
         castShadow
         shadow-mapSize={[1024, 1024]}
         shadow-bias={-0.0004}

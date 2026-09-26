@@ -18,7 +18,7 @@ export const toWorld = (x: number, y: number): [number, number, number] => [
 ];
 
 export const COLORS = {
-  substrate: "#0e3b2c",
+  substrate: "#1a6048",
   silk: "#8fb3a6",
   copper: "#c2803a",
   copperBright: "#e0a052",

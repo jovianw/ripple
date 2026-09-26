@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { NavTabs } from "@/components/NavTabs";
 
 import { ago, type BoardSummary, type Health, type LessonDoc, type SubcircuitDoc } from "@/lib/live";
 import { getJson, usePolling } from "@/lib/usePolling";
@@ -66,22 +67,14 @@ export function SystemConsole() {
   return (
     <div className="mx-auto flex min-h-screen max-w-4xl flex-col px-6">
       <header className="flex h-12 shrink-0 items-center justify-between">
-        <div className="flex items-baseline gap-4">
+        <div className="flex items-center gap-5">
           <Link
             href="/"
             className="text-[15px] font-medium tracking-[0.08em] text-ink hover:text-accent"
           >
             Ripple
           </Link>
-          <nav className="flex items-baseline gap-3 text-[12px]">
-            <Link href="/" className="text-faint hover:text-ink">
-              Board
-            </Link>
-            <span className="text-ink">System</span>
-            <Link href="/harness" className="text-faint hover:text-ink">
-              Harness
-            </Link>
-          </nav>
+          <NavTabs active="system" />
         </div>
 
         <div className="flex items-center gap-5 text-[12px]">

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { NavTabs } from "@/components/NavTabs";
 
 import { PCBViewport } from "@/components/pcb/PCBViewport";
 import { Telemetry } from "@/components/build/Telemetry";
@@ -78,14 +79,15 @@ export function RealBoardView({ boardId }: { boardId: string }) {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-void">
       <header className="flex h-12 shrink-0 items-center justify-between px-6">
-        <div className="flex items-baseline gap-2.5">
+        <div className="flex items-center gap-5">
           <Link
             href="/system"
             className="text-[15px] font-medium tracking-[0.08em] text-ink hover:text-accent"
           >
             Ripple
           </Link>
-          <span className="text-[12px] text-ghost">
+          <NavTabs active="board" />
+          <span className="text-[12px] text-faint">
             {meta?.spec_id ?? boardId}
           </span>
         </div>
