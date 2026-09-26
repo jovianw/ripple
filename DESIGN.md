@@ -234,12 +234,13 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 - [ ] **4:30–5:00** Record the 1-minute video on site and submit
 
 ### Marcos: hardware logic, critic, planner, demo
-- [ ] **Before 10:30** Install tscircuit on every laptop; build an LED-plus-resistor board through the autorouter
+- [x] **Before 10:30** Install tscircuit on every laptop; build an LED-plus-resistor board through the autorouter (`npm run smoke`)
 - [ ] 10-minute PCB primer for the team at kickoff
-- [ ] **11:00–12:30** 8 training and 4 held-out specs; hidden checker (connectivity, pull-up and decoupling rules) returning `RunResult`
+- [x] **11:00–12:30** 8 training and 4 held-out specs (`specs/specs.json`); hidden checker (connectivity, pull-up, decoupling, DRC) returning `RunResult` (`checks/`, `npm run test:checks`)
 - [ ] **12:30–1:30** Critic agent (code and prompt) and lesson extraction into Atlas
 - [ ] **1:30–2:30** Planner agent and assembler
-- [ ] **2:30–3:30** Finale board spec, checks, first full run; parts whitelist
+- [x] Parts whitelist (`parts/whitelist.json` v2, `npm run verify:parts`)
+- [ ] **2:30–3:30** Finale board spec, checks, first full run
 - [ ] Present the live demo
 
 ### Jovian: harness core and memory
