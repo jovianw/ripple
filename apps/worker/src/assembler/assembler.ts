@@ -1,6 +1,7 @@
 // Assembler: combines finished subcircuits (tscircuit code strings, each exporting a component that
 // returns a <group name=...>) into one board. Deterministic: same inputs, same code and layout.
 // Groups connect only through named nets (net.V3V3, net.GND, net.SDA...). See README.md.
+import { clearLabels } from "../tools/placement.js";
 import type { AnyCircuitElement } from "circuit-json";
 import type { RunResult } from "@ripple/types";
 
@@ -74,7 +75,8 @@ export async function evaluateCode(code: string): Promise<AnyCircuitElement[]> {
   await runner.renderUntilSettled();
   const json = await runner.getCircuitJson();
   await runner.kill().catch(() => undefined);
-  return json;
+  // Part-name labels moved off other parts and pads (silkscreen only; nothing else changes).
+  return clearLabels(json);
 }
 
 export function findExportName(sub: Subcircuit): string {

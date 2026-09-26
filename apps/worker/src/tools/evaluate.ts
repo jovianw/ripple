@@ -8,6 +8,7 @@
 // use tscircuit's built-in JSX intrinsics, not arbitrary network imports.
 import { CircuitRunner } from "tscircuit";
 import type { CompileResult } from "./compile.js";
+import { clearLabels } from "./placement.js";
 
 export class EvaluateError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
@@ -34,7 +35,8 @@ export async function evaluateCircuitSource(source: string): Promise<CompileResu
     throw new EvaluateError("tscircuit evaluation failed", { cause });
   }
 
-  const circuitJson = await runner.getCircuitJson();
+  // Part-name labels moved off other parts and pads (silkscreen only; nothing else changes).
+  const circuitJson = clearLabels(await runner.getCircuitJson());
   const errors = circuitJson.filter((el) => el.type.endsWith("_error"));
 
   return { circuitJson, errors };

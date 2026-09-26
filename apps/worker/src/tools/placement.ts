@@ -390,3 +390,90 @@ export async function placeParts(source: string, render: Render): Promise<{ sour
   }
   return { source: best!.source, circuitJson: best!.circuitJson }
 }
+
+// ---- Part-name labels ----
+// tscircuit puts each part's name just above it, whatever is there: on a packed board the labels land on other
+// parts' pads and on each other, which makes the PCB images and silkscreen Gerbers hard to read. A label only
+// affects silkscreen (not DRC, routing or the checks), so it's moved in the render itself; the code is unchanged.
+
+// Silkscreen glyphs are about this wide per character, as a fraction of the font size (a little generous).
+const CHAR_W = 0.72
+const LABEL_GAP = 0.1
+
+/** Every pad and plated hole as a square box around its centre (its larger side both ways). */
+function padBoxes(els: El[]): Box[] {
+  const out: Box[] = []
+  for (const e of els) {
+    const side = e.type === "pcb_smtpad"
+      ? e.shape === "circle" ? 2 * e.radius : Math.max(e.width ?? 0, e.height ?? 0)
+      : e.type === "pcb_plated_hole" ? e.outer_diameter ?? Math.max(e.outer_width ?? 0, e.outer_height ?? 0, e.rect_pad_width ?? 0, e.rect_pad_height ?? 0) : 0
+    if (side > 0 && Number.isFinite(e.x) && Number.isFinite(e.y)) out.push({ x0: e.x - side / 2, x1: e.x + side / 2, y0: e.y - side / 2, y1: e.y + side / 2 })
+  }
+  return out
+}
+
+/** The box a label's text covers, centred on `at`. */
+function textBox(t: El, at: { x: number; y: number }): Box {
+  const w = String(t.text ?? "").length * t.font_size * CHAR_W + 2 * LABEL_GAP
+  const h = t.font_size + 2 * LABEL_GAP
+  const sideways = Math.round((t.ccw_rotation ?? 0) / 90) % 2 !== 0
+  const [hw, hh] = sideways ? [h / 2, w / 2] : [w / 2, h / 2]
+  return { x0: at.x - hw, x1: at.x + hw, y0: at.y - hh, y1: at.y + hh }
+}
+
+const inside = (b: Box, outer: Box) => b.x0 >= outer.x0 && b.x1 <= outer.x1 && b.y0 >= outer.y0 && b.y1 <= outer.y1
+
+/**
+ * The render with every part-name label clear of other parts' courtyards, all pads, other labels and the board
+ * edge: a label that already is stays put; one that isn't moves to the nearest clear spot to where it was, upright.
+ * A label may sit over its own part's body (that's where tscircuit puts it), not over its pads. Returns a new array.
+ */
+export function clearLabels<T>(circuitJson: T[]): T[] {
+  const els = circuitJson as unknown as El[]
+  const labels = els.filter((e) => e.type === "pcb_silkscreen_text" && e.pcb_component_id && e.anchor_position && e.font_size > 0)
+  if (!labels.length) return circuitJson
+  const outlines = exactCourtyards(els)
+  const pads = padBoxes(els)
+  const pb = els.find((e) => e.type === "pcb_board" && e.center && e.width && e.height)
+  const board: Box | undefined = pb
+    ? { x0: pb.center.x - pb.width / 2 + 0.2, x1: pb.center.x + pb.width / 2 - 0.2, y0: pb.center.y - pb.height / 2 + 0.2, y1: pb.center.y + pb.height / 2 - 0.2 }
+    : undefined
+  const clearOf = (t: El, box: Box, placed: Box[]) =>
+    (!board || inside(box, board)) &&
+    !pads.some((p) => overlaps(box, p)) &&
+    ![...outlines].some(([id, b]) => id !== t.pcb_component_id && overlaps(box, b)) &&
+    !placed.some((p) => overlaps(box, p))
+
+  // Labels already clear of parts and pads keep their spot (the earlier one wins where two collide).
+  const placed: Box[] = []
+  const move: El[] = []
+  for (const t of labels) {
+    const box = textBox(t, t.anchor_position)
+    if (clearOf(t, box, placed)) placed.push(box)
+    else move.push(t)
+  }
+  const moved = new Map<El, El>()
+  const step = 0.1, n = 60
+  for (const t of move) {
+    // Its own rotation first; upright only if that gets it strictly closer (by more than a hair).
+    const rotations = [...new Set([t.ccw_rotation ?? 0, 0])]
+    let best: { x: number; y: number; rotation: number; d: number } | undefined
+    for (const rotation of rotations) {
+      const shaped = { ...t, ccw_rotation: rotation }
+      const penalty = rotation === (t.ccw_rotation ?? 0) ? 0 : 0.05
+      for (let i = -n; i <= n; i++) {
+        for (let j = -n; j <= n; j++) {
+          const d = Math.hypot(i, j) * step + penalty
+          if (best && d >= best.d) continue
+          const at = { x: t.anchor_position.x + i * step, y: t.anchor_position.y + j * step }
+          if (clearOf(t, textBox(shaped, at), placed)) best = { ...at, rotation, d }
+        }
+      }
+    }
+    if (!best) continue // nowhere clear within 6mm: leave it where tscircuit put it
+    const next = { ...t, anchor_position: { x: best.x, y: best.y }, ccw_rotation: best.rotation }
+    placed.push(textBox(next, next.anchor_position))
+    moved.set(t, next)
+  }
+  return (els.map((e) => moved.get(e) ?? e) as unknown) as T[]
+}

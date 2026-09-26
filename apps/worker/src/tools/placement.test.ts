@@ -70,3 +70,25 @@ test("placeParts: no render errors, each cap within 2.5mm of a chip supply pad, 
   }
   for (const n of ["J1", "U1", "U2", "C1", "C2", "R1", "R2"]) assert.match(placed.source, new RegExp(`name="${n}" pcbX=\\{`))
 })
+
+test("clearLabels: no part-name label on a pad, on another part's courtyard, or on another label", async () => {
+  // evaluateCircuitSource runs clearLabels on every render.
+  const { circuitJson } = await placeParts(source, render)
+  const els = circuitJson as El[]
+  const labels = els.filter((e) => e.type === "pcb_silkscreen_text" && e.pcb_component_id)
+  assert.ok(labels.length >= 7)
+  const box = (t: El) => {
+    const w = t.text.length * t.font_size * 0.72, h = t.font_size
+    const [hw, hh] = Math.round((t.ccw_rotation ?? 0) / 90) % 2 ? [h / 2, w / 2] : [w / 2, h / 2]
+    return { x0: t.anchor_position.x - hw, x1: t.anchor_position.x + hw, y0: t.anchor_position.y - hh, y1: t.anchor_position.y + hh }
+  }
+  const hit = (a: any, b: any) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1
+  const pads = els.filter((e) => e.type === "pcb_smtpad" || e.type === "pcb_plated_hole").map((p) => {
+    const s = p.type === "pcb_smtpad" ? Math.max(p.width ?? 0, p.height ?? 0, 2 * (p.radius ?? 0)) : p.outer_diameter ?? Math.max(p.outer_width ?? 0, p.outer_height ?? 0)
+    return { x0: p.x - s / 2, x1: p.x + s / 2, y0: p.y - s / 2, y1: p.y + s / 2 }
+  })
+  for (const [i, t] of labels.entries()) {
+    assert.ok(!pads.some((p) => hit(box(t), p)), `${t.text} label sits on a pad`)
+    for (const u of labels.slice(i + 1)) assert.ok(!hit(box(t), box(u)), `${t.text} and ${u.text} labels overlap`)
+  }
+})
