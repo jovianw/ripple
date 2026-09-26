@@ -5,6 +5,7 @@ import type { HarnessConfig, Lesson, ModelTier, Subcircuit } from "@ripple/types
 import type { CircuitJson } from "tscircuit";
 import { callModel, type ChatMessage } from "../tools/router.js";
 import { evaluateCircuitSource } from "../tools/evaluate.js";
+import { EvaluateError } from "../tools/evaluate.js";
 import { runDrc, type DrcResult } from "../tools/drc.js";
 import { computeMetrics, type CircuitMetrics } from "../tools/metrics.js";
 import { partsWhitelistPrompt } from "../tools/parts-whitelist.js";
@@ -108,6 +109,14 @@ function extractSource(content: string): string {
   return (fenced ? fenced[1] : content).trim();
 }
 
+/** The model's code didn't compile or render. Carries the code and the call's cost so the loop can record the attempt and hand the code to the critic. */
+export class CoderCompileError extends Error {
+  constructor(message: string, readonly source: string, readonly model: CoderModelInfo, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "CoderCompileError";
+  }
+}
+
 export async function runCoder(input: CoderInput): Promise<CoderResult> {
   const messages: ChatMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
@@ -117,22 +126,25 @@ export async function runCoder(input: CoderInput): Promise<CoderResult> {
   const routerResult = await callModel({ role: "coder", messages, config: input.config });
   const source = extractSource(routerResult.content);
 
-  const { circuitJson } = await evaluateCircuitSource(source);
+  const model: CoderModelInfo = {
+    model: routerResult.model,
+    tier: routerResult.tier,
+    promptTokens: routerResult.promptTokens,
+    completionTokens: routerResult.completionTokens,
+    totalTokens: routerResult.totalTokens,
+    costUsd: routerResult.costUsd,
+  };
+
+  let circuitJson: CircuitJson;
+  try {
+    ({ circuitJson } = await evaluateCircuitSource(source));
+  } catch (err) {
+    if (!(err instanceof EvaluateError)) throw err;
+    const cause = err.cause instanceof Error ? err.cause.message : String(err.cause ?? "");
+    throw new CoderCompileError(`code did not compile or render: ${cause || err.message}`.slice(0, 500), source, model, { cause: err });
+  }
   const drc = runDrc(circuitJson);
   const metrics = computeMetrics(circuitJson);
 
-  return {
-    source,
-    circuitJson,
-    drc,
-    metrics,
-    model: {
-      model: routerResult.model,
-      tier: routerResult.tier,
-      promptTokens: routerResult.promptTokens,
-      completionTokens: routerResult.completionTokens,
-      totalTokens: routerResult.totalTokens,
-      costUsd: routerResult.costUsd,
-    },
-  };
+  return { source, circuitJson, drc, metrics, model };
 }
