@@ -18,7 +18,7 @@ import { BOARD_TOP, COLORS } from "./pcbScene.shared";
 const LIFE_MS = 700;
 const MAX_RADIUS = 3.4;
 
-export type RippleTone = "place" | "error" | "repair";
+export type RippleTone = "error" | "repair";
 
 export interface RippleEvent {
   id: string;
@@ -28,7 +28,6 @@ export interface RippleEvent {
 }
 
 const TONE_COLOR: Record<RippleTone, string> = {
-  place: COLORS.placing,
   error: COLORS.error,
   repair: COLORS.repairing,
 };
