@@ -1,12 +1,13 @@
 // Hidden checker entry point: grades a board's Circuit JSON against a spec's expected checks.
 import type { AnyCircuitElement } from "circuit-json"
-import type { RunResult, CheckFailure } from "@board-forge/types"
+import type { RunResult, CheckFailure } from "@ripple/types"
 import type { ExpectedChecks } from "./expected.ts"
 import { Netlist } from "./netlist.ts"
 import { checkConnectivity } from "./rules/connectivity.ts"
 import { checkPullups } from "./rules/pullups.ts"
 import { checkDecoupling } from "./rules/decoupling.ts"
 import { checkDrc } from "./rules/drc.ts"
+import { checkDividers, checkLeds, checkRc, checkResistors, checkSwitches, checkTied } from "./rules/circuit.ts"
 
 export interface RunChecksMeta {
   board_id?: string;
@@ -15,7 +16,7 @@ export interface RunChecksMeta {
 
 /**
  * Runs every hidden check and returns a RunResult (stage "checks").
- * Checks: connectivity, separate, pullups, decoupling, drc. Never throws on bad input;
+ * Checks: connectivity, separate, pullups, decoupling, resistors, tied, leds, divider, rc, switch, drc. Never throws on bad input;
  * a malformed board comes back as failures with details.
  */
 export async function runChecks(
@@ -34,6 +35,12 @@ export async function runChecks(
     ...checkConnectivity(net, expected),
     ...checkPullups(net, expected),
     ...checkDecoupling(net, expected),
+    ...checkResistors(net, expected),
+    ...checkTied(net, expected),
+    ...checkLeds(net, expected),
+    ...checkDividers(net, expected),
+    ...checkRc(net, expected),
+    ...checkSwitches(net, expected),
   ];
   const drc = await checkDrc(json, expected);
   failures.push(...drc.failures);

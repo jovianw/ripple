@@ -1,5 +1,5 @@
 // Connectivity: every required net exists, and nets that must stay apart do.
-import type { CheckFailure } from "@board-forge/types"
+import type { CheckFailure } from "@ripple/types"
 import type { ExpectedChecks } from "../expected.ts"
 import type { Netlist } from "../netlist.ts"
 
@@ -14,12 +14,16 @@ export function checkConnectivity(net: Netlist, expected: ExpectedChecks): Check
     const unconnected: string[] = [];
     let bad = false;
     for (const ref of req.pins) {
-      const r = net.resolvePin(ref);
+      const r = net.resolvePins(ref);
       if (!r.ok) { failures.push({ check: "connectivity", detail: `net ${req.name}: ${r.error}` }); bad = true; continue; }
-      if (!r.value.net) { unconnected.push(ref); continue; }
-      const g = groups.get(r.value.net) ?? [];
-      g.push(ref);
-      groups.set(r.value.net, g);
+      for (const port of r.value) {
+        // Name the pin the way the rule did when the reference matched only one pin.
+        const label = r.value.length === 1 ? ref : port.ref;
+        if (!port.net) { unconnected.push(label); continue; }
+        const g = groups.get(port.net) ?? [];
+        g.push(label);
+        groups.set(port.net, g);
+      }
     }
     if (bad) continue;
     if (unconnected.length) failures.push({ check: "connectivity", detail: `net ${req.name}: ${unconnected.join(", ")} not connected to anything` });

@@ -48,6 +48,7 @@ Check tscircuit works: `npm run smoke` renders `examples/led-board.tsx` through 
 | `npm run smoke` | LED test board through autorouter + DRC |
 | `npm run smoke t03` | Reference USB-C → 3.3V board (hidden) through autorouter + DRC |
 | `npm run verify:parts` | Renders every whitelisted part |
+| `npm run test:checks` | Hidden checker tests (good boards pass, broken boards fail) |
 
 ## Specs and parts
 

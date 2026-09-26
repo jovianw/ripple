@@ -2,7 +2,7 @@
 // plus everything @tscircuit/checks reports as an error (warnings are ignored).
 import type { AnyCircuitElement } from "circuit-json"
 import { runAllChecks } from "@tscircuit/checks"
-import type { CheckFailure } from "@board-forge/types"
+import type { CheckFailure } from "@ripple/types"
 import type { ExpectedChecks } from "../expected.ts"
 
 const MAX_LISTED = 10;

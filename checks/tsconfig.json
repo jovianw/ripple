@@ -6,11 +6,21 @@
     "composite": false,
     "declaration": false,
     "allowImportingTsExtensions": true,
-    "types": ["tscircuit", "node"],
+    "types": [
+      "tscircuit",
+      "node"
+    ],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "target": "ESNext",
-    "lib": ["ESNext", "DOM"]
+    "lib": [
+      "ESNext",
+      "DOM"
+    ],
+    "resolveJsonModule": true
   },
-  "include": [".", "../examples"]
+  "include": [
+    ".",
+    "../examples"
+  ]
 }

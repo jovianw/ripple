@@ -1,5 +1,5 @@
 // Decoupling: a capacitor from each chip's power pin to ground, within max_mm of the pin's pad.
-import type { CheckFailure } from "@board-forge/types"
+import type { CheckFailure } from "@ripple/types"
 import type { ExpectedChecks } from "../expected.ts"
 import { distanceMm, type Netlist } from "../netlist.ts"
 
@@ -12,10 +12,18 @@ function fmtMm(mm: number): string {
 export function checkDecoupling(net: Netlist, expected: ExpectedChecks): CheckFailure[] {
   const failures: CheckFailure[] = [];
   for (const rule of expected.decoupling ?? []) {
-    const label = `${rule.chip} ${rule.power_pin}`;
     const maxMm = rule.max_mm ?? DEFAULT_MAX_MM;
-    const pin = net.resolvePin(`${rule.chip}.${rule.power_pin}`);
-    if (!pin.ok) { failures.push({ check: "decoupling", detail: `${label}: ${pin.error}` }); continue; }
+    const chips = net.resolveComponents(rule.chip);
+    if (!chips.ok) { failures.push({ check: "decoupling", detail: `${rule.chip} ${rule.power_pin}: ${chips.error}` }); continue; }
+    for (const chip of chips.value) {
+    const label = `${chip.name} ${rule.power_pin}`;
+    const port = net.pinOn(chip, rule.power_pin);
+    if (!port) {
+      if (rule.optional) continue;
+      failures.push({ check: "decoupling", detail: `${label}: pin not found` });
+      continue;
+    }
+    const pin = { value: port };
     if (!pin.value.net) { failures.push({ check: "decoupling", detail: `${label} is not connected to anything` }); continue; }
     const powerKey = pin.value.net;
 
@@ -55,6 +63,7 @@ export function checkDecoupling(net: Netlist, expected: ExpectedChecks): CheckFa
       const nearest = measured.filter((c) => c.mm != null).sort((a, b) => a.mm! - b.mm!)[0];
       const hint = nearest ? ` (nearest ${nearest.cap.name} at ${fmtMm(nearest.mm!)})` : " (no PCB placement found)";
       failures.push({ check: "decoupling", detail: `${label} has no cap within ${maxMm}mm${hint}` });
+    }
     }
   }
   return failures;
