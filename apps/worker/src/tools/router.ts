@@ -21,11 +21,20 @@ export interface ChatMessage {
   content: string;
 }
 
+/** OpenRouter/OpenAI-style structured-output schema, e.g. critic/prompt.ts's CRITIC_SCHEMA. */
+export interface JsonSchema {
+  name: string;
+  strict?: boolean;
+  schema: unknown;
+}
+
 export interface CallModelInput {
   role: AgentName;
   messages: ChatMessage[];
   config: HarnessConfig;
   maxTokens?: number;
+  /** Requests JSON-schema structured output (OpenRouter response_format) instead of free text. */
+  schema?: JsonSchema;
 }
 
 export interface RouterCallResult {
@@ -40,7 +49,7 @@ export interface RouterCallResult {
 
 const langsmith = process.env.LANGSMITH_TRACING === "true" ? new LangSmith() : undefined;
 
-async function openRouterCall(model: string, messages: ChatMessage[], maxTokens: number) {
+async function openRouterCall(model: string, messages: ChatMessage[], maxTokens: number, schema?: JsonSchema) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
 
@@ -54,7 +63,13 @@ async function openRouterCall(model: string, messages: ChatMessage[], maxTokens:
     },
     // usage.include asks OpenRouter to return real cost in the response
     // instead of us maintaining a per-model price table.
-    body: JSON.stringify({ model, messages, max_tokens: maxTokens, usage: { include: true } }),
+    body: JSON.stringify({
+      model,
+      messages,
+      max_tokens: maxTokens,
+      usage: { include: true },
+      ...(schema && { response_format: { type: "json_schema", json_schema: schema } }),
+    }),
   });
 
   if (!res.ok) {
@@ -73,7 +88,13 @@ async function openRouterCall(model: string, messages: ChatMessage[], maxTokens:
   };
 }
 
-export async function callModel({ role, messages, config, maxTokens = DEFAULT_MAX_TOKENS }: CallModelInput): Promise<RouterCallResult> {
+export async function callModel({
+  role,
+  messages,
+  config,
+  maxTokens = DEFAULT_MAX_TOKENS,
+  schema,
+}: CallModelInput): Promise<RouterCallResult> {
   const tier = config.routing[role];
   const model = MODEL_IDS[tier];
 
@@ -81,7 +102,7 @@ export async function callModel({ role, messages, config, maxTokens = DEFAULT_MA
   // pattern); falls back to a plain call otherwise so tracing setup never
   // blocks the router.
   const call = langsmith
-    ? traceable((m: string, msgs: ChatMessage[], max: number) => openRouterCall(m, msgs, max), {
+    ? traceable((m: string, msgs: ChatMessage[], max: number, s?: JsonSchema) => openRouterCall(m, msgs, max, s), {
         name: `router:${role}`,
         run_type: "llm",
         client: langsmith,
@@ -89,7 +110,7 @@ export async function callModel({ role, messages, config, maxTokens = DEFAULT_MA
       })
     : openRouterCall;
 
-  const data = await call(model, messages, maxTokens);
+  const data = await call(model, messages, maxTokens, schema);
 
   return {
     content: data.choices[0].message.content,
@@ -99,5 +120,29 @@ export async function callModel({ role, messages, config, maxTokens = DEFAULT_MA
     completionTokens: data.usage?.completion_tokens,
     totalTokens: data.usage?.total_tokens,
     costUsd: data.usage?.cost,
+  };
+}
+
+/**
+ * The critic and planner both take a `complete(system, user, schema) -> Promise<unknown>`
+ * dependency (see CriticDeps/PlannerDeps) so they stay model-agnostic. Role and config
+ * pick the tier the same way callModel does; bind them once per caller.
+ */
+export function createComplete(role: AgentName, config: HarnessConfig) {
+  return async function complete(system: string, user: string, schema: JsonSchema): Promise<unknown> {
+    const result = await callModel({
+      role,
+      config,
+      schema,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    });
+    try {
+      return JSON.parse(result.content);
+    } catch (cause) {
+      throw new Error(`${role} model returned non-JSON content: ${result.content.slice(0, 200)}`, { cause });
+    }
   };
 }
