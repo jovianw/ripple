@@ -12,7 +12,7 @@ Every spec also gets the **base checks**: board renders, every trace routed, 0 D
 | t03_ldo_3v3 | t02's USB-C rules; regulator input cap ≥1µF and output cap ≥1µF, each within 3mm of the regulator; 3.3V rail on header; power LED + resistor on 3.3V |
 | t04_i2c_temp_breakout | **SDA and SCL each pulled up to 3V3 (2.2k–10kΩ)**; **100nF decoupling within 3mm of sensor VDD**; sensor address pins tied to a rail, not floating; header pins wired to the matching nets |
 | t05_divider_12v_adc | Two resistors from 12V to GND, midpoint to output; SPICE: output 2.9–3.1V at 12V in; total divider resistance ≥10kΩ |
-| t06_button_debounced | Pull-up 4.7k–47kΩ from signal to 3V3; button between signal and GND; RC debounce (series R + cap to GND, τ 1–20 ms); SPICE: high released, low pressed |
+| t06_button_debounced | Pull-up 4.7k–47kΩ from BTN to 3V3 (direct, or through the series debounce resistor); button between signal and GND; RC debounce (series R + cap to GND, τ 1–20 ms); SPICE: high released, low pressed |
 | t07_mcu_blinky | 100nF within 3mm of **every** MCU VDD pin; reset pulled up if the MCU has a reset pin; LED + resistor on a GPIO; programming header wired to the MCU's programming pins, VCC, and GND |
 | t08_i2c_two_devices | t04's pull-up rule (at least one set, warn if more than one); decoupling on both devices; different I2C addresses; EEPROM WP tied to a rail |
 | h01_usbc_humidity_node | t03's USB-C and regulator rules; t04's I2C rules for the humidity sensor; power LED |

@@ -16,10 +16,22 @@ export function checkResistors(net: Netlist, expected: ExpectedChecks): CheckFai
     const a = net.resolveNet(rule.a)
     const b = net.resolveNet(rule.b)
     if (!a.ok || !b.ok) { failures.push({ check: "resistors", detail: `${rule.label}: ${(!a.ok ? a : b as any).error}` }); continue }
-    const rs = net.between("simple_resistor", a.value, b.value)
-    if (rs.length === 0) { failures.push({ check: "resistors", detail: `${rule.label}: no resistor between ${rule.a} and ${rule.b}` }); continue }
-    if (!rs.some((r) => inRange(r.resistance, rule.min_ohms, rule.max_ohms))) {
-      failures.push({ check: "resistors", detail: `${rule.label}: ${rs.map((r) => `${r.name}=${fmtOhms(r.resistance)}`).join(", ")} outside ${range(rule.min_ohms, rule.max_ohms, " ohms")}` })
+    // Candidate paths: one resistor a-b, or (series_ok) two resistors a-x-b.
+    const paths: { names: string; ohms?: number }[] = net.between("simple_resistor", a.value, b.value)
+      .map((r) => ({ names: `${r.name}=${fmtOhms(r.resistance)}`, ohms: r.resistance }))
+    if (rule.series_ok) {
+      for (const r1 of net.componentsOfType("simple_resistor")) {
+        const mid = net.otherSide(r1, a.value)
+        if (!mid || mid === b.value) continue
+        for (const r2 of net.between("simple_resistor", mid, b.value)) {
+          if (r2 === r1) continue
+          paths.push({ names: `${r1.name}=${fmtOhms(r1.resistance)} + ${r2.name}=${fmtOhms(r2.resistance)}`, ohms: (r1.resistance ?? NaN) + (r2.resistance ?? NaN) })
+        }
+      }
+    }
+    if (paths.length === 0) { failures.push({ check: "resistors", detail: `${rule.label}: no resistor between ${rule.a} and ${rule.b}` }); continue }
+    if (!paths.some((p) => inRange(p.ohms, rule.min_ohms, rule.max_ohms))) {
+      failures.push({ check: "resistors", detail: `${rule.label}: ${paths.map((p) => p.names).join(", ")} outside ${range(rule.min_ohms, rule.max_ohms, " ohms")}` })
     }
   }
   return failures
