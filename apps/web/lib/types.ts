@@ -34,6 +34,10 @@ export interface PCBComponent {
   note?: string;
   /** Unit cost, summed into the BOM metric. */
   costUsd?: number;
+  /** Subcircuit this part was designed in, when the board was built block by block. */
+  group?: string;
+  /** Ids of the parts wired directly to this one (port-to-port traces). */
+  links?: string[];
 }
 
 export type PCBTraceStatus = "normal" | "new" | "error" | "repairing";

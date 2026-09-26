@@ -88,6 +88,65 @@ export function circuitJsonToPCBState(elements: unknown): AdapterResult {
     }
   }
 
+  // Subcircuit groups (planned boards) and direct wiring, for splitting a
+  // failed board into blocks. Ports and groups are keyed by source ids.
+  const groups = new Map<string, El>();
+  const portOwner = new Map<string, string>();
+  for (const e of els) {
+    if (e.type === "source_group" && typeof e.source_group_id === "string") {
+      groups.set(e.source_group_id, e);
+    }
+    if (
+      e.type === "source_port" &&
+      typeof e.source_port_id === "string" &&
+      typeof e.source_component_id === "string"
+    ) {
+      portOwner.set(e.source_port_id, e.source_component_id);
+    }
+  }
+  // A part's subcircuit is its nearest named group that isn't the board root
+  // (the assembler nests each block as <group name=key> inside a slot group).
+  const groupOf = (groupId: unknown): string | undefined => {
+    for (
+      let g = typeof groupId === "string" ? groups.get(groupId) : undefined;
+      g;
+      g = typeof g.parent_source_group_id === "string" ? groups.get(g.parent_source_group_id) : undefined
+    ) {
+      if (typeof g.parent_source_group_id === "string" && typeof g.name === "string" && g.name) {
+        return g.name.replace(/^slot_/, "");
+      }
+    }
+    return undefined;
+  };
+  const linked = new Map<string, Set<string>>();
+  for (const e of els) {
+    if (e.type !== "source_trace" || !Array.isArray(e.connected_source_port_ids)) continue;
+    const owners = [
+      ...new Set(
+        (e.connected_source_port_ids as unknown[])
+          .map((p) => (typeof p === "string" ? portOwner.get(p) : undefined))
+          .filter((x): x is string => Boolean(x)),
+      ),
+    ];
+    for (const a of owners) {
+      for (const b of owners) {
+        if (a === b) continue;
+        if (!linked.has(a)) linked.set(a, new Set());
+        linked.get(a)!.add(b);
+      }
+    }
+  }
+  const pcbIdBySource = new Map<string, string>();
+  for (const e of els) {
+    if (
+      e.type === "pcb_component" &&
+      typeof e.source_component_id === "string" &&
+      typeof e.pcb_component_id === "string"
+    ) {
+      pcbIdBySource.set(e.source_component_id, e.pcb_component_id);
+    }
+  }
+
   // Errors first, so a component can be marked as it is built.
   const errors: { message: string; componentId?: string }[] = [];
   for (const e of els) {
@@ -135,6 +194,10 @@ export function circuitJsonToPCBState(elements: unknown): AdapterResult {
       note: erroredComponents.has(id)
         ? errors.find((x) => x.componentId === id)?.message
         : undefined,
+      group: groupOf(source?.source_group_id),
+      links: [...(linked.get(String(e.source_component_id)) ?? [])]
+        .map((s) => pcbIdBySource.get(s))
+        .filter((x): x is string => Boolean(x)),
     });
   }
 

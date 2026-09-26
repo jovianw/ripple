@@ -6,7 +6,9 @@ import { ContactShadows, OrbitControls } from "@react-three/drei";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { Vector3 } from "three";
 
+import type { PCBBlock } from "@/lib/blocks";
 import type { PCBComponent, PCBState } from "@/lib/types";
+import { PCBBlocks } from "./PCBBlocks";
 import { PCBBoard } from "./PCBBoard";
 import { PCBComponentMesh } from "./PCBComponentMesh";
 import { PCBTraceLine } from "./PCBTraceLine";
@@ -18,6 +20,7 @@ import { WorldGrid } from "./WorldGrid";
 // height on the camera to read the board's thickness.
 const HOME_POS = new Vector3(0, 11.0, 12.2);
 const HOME_TARGET = new Vector3(0, 0, 0);
+const WIDE_SHIFT = 2.6;
 
 /**
  * Eases the camera toward a part under inspection and back again. Deliberately
@@ -27,12 +30,15 @@ const HOME_TARGET = new Vector3(0, 0, 0);
 function CameraRig({
   focus,
   settled,
+  wide,
   enabled,
   controls,
 }: {
   focus: { x: number; y: number } | null;
   /** On completion the camera eases back a touch, letting the board settle. */
   settled: boolean;
+  /** Pull back to fit a board split into blocks. */
+  wide: boolean;
   enabled: boolean;
   controls: React.RefObject<OrbitControlsImpl | null>;
 }) {
@@ -45,18 +51,19 @@ function CameraRig({
   // the framing collapses.
   const returning = useRef(0);
   const hadFocus = useRef(false);
+  // Starts false so a scene that opens already split still eases back to fit.
+  const wasWide = useRef(false);
 
   useFrame((_, delta) => {
     if (!enabled) return;
 
     const focused = focus !== null;
     if (hadFocus.current && !focused) returning.current = 900;
+    if (wasWide.current !== wide) returning.current = 1400;
+    wasWide.current = wide;
     hadFocus.current = focused;
 
-    if (!focused) {
-      returning.current = Math.max(0, returning.current - delta * 1000);
-      if (returning.current === 0) return;
-    }
+    if (!focused && returning.current === 0) return;
 
     if (focused) {
       wantTarget.current.set(focus.x * 0.72, 0, -focus.y * 0.72);
@@ -65,6 +72,13 @@ function CameraRig({
       wantTarget.current.copy(HOME_TARGET);
       wantPos.current.copy(HOME_POS);
       if (settled) wantPos.current.multiplyScalar(1.05);
+      if (wide) {
+        // Back off to fit the spread blocks, aimed right of centre so they sit
+        // clear of the break-it-up panel over the right of the view.
+        wantPos.current.multiplyScalar(1.4);
+        wantPos.current.x += WIDE_SHIFT;
+        wantTarget.current.x += WIDE_SHIFT;
+      }
     }
 
     const k = 1 - Math.exp(-delta * 4.2);
@@ -74,6 +88,8 @@ function CameraRig({
       c.target.lerp(wantTarget.current, k);
       c.update();
     }
+    // Counted down after moving, so one long frame still moves the camera.
+    if (!focused) returning.current = Math.max(0, returning.current - delta * 1000);
   });
 
   return null;
@@ -88,6 +104,8 @@ export interface PCBSceneProps {
   focusId: string | null;
   complete: boolean;
   onSelect: (component: PCBComponent | null) => void;
+  /** A failed board split into blocks; replaces the whole board while set. */
+  blocks?: PCBBlock[] | null;
 }
 
 export function PCBScene({
@@ -99,6 +117,7 @@ export function PCBScene({
   focusId,
   complete,
   onSelect,
+  blocks,
 }: PCBSceneProps) {
   const controls = useRef<OrbitControlsImpl>(null);
   const [userMoved, setUserMoved] = useState(false);
@@ -135,21 +154,32 @@ export function PCBScene({
       {/* Cool rim from behind, to separate the board edge from the backdrop. */}
       <directionalLight position={[-7, 4.5, -8]} intensity={0.7} color="#6fb3d8" />
 
-      <PCBBoard width={pcb.board.width} height={pcb.board.height} />
-
-      {pcb.traces.map((trace) => (
-        <PCBTraceLine key={trace.id} trace={trace} />
-      ))}
-
-      {pcb.components.map((component) => (
-        <PCBComponentMesh
-          key={component.id}
-          component={component}
-          selected={component.id === selectedId}
-          flashToken={changedIds.has(component.id) ? snapshotVersion : -1}
+      {blocks && blocks.length > 0 ? (
+        <PCBBlocks
+          pcb={pcb}
+          blocks={blocks}
+          selectedId={selectedId}
           onSelect={onSelect}
         />
-      ))}
+      ) : (
+        <>
+          <PCBBoard width={pcb.board.width} height={pcb.board.height} />
+
+          {pcb.traces.map((trace) => (
+            <PCBTraceLine key={trace.id} trace={trace} />
+          ))}
+
+          {pcb.components.map((component) => (
+            <PCBComponentMesh
+              key={component.id}
+              component={component}
+              selected={component.id === selectedId}
+              flashToken={changedIds.has(component.id) ? snapshotVersion : -1}
+              onSelect={onSelect}
+            />
+          ))}
+        </>
+      )}
 
       <ContactShadows
         position={[0, BOARD_BOTTOM - 0.008, 0]}
@@ -166,7 +196,7 @@ export function PCBScene({
         dampingFactor={0.08}
         enablePan={false}
         minDistance={5.5}
-        maxDistance={22}
+        maxDistance={26}
         maxPolarAngle={Math.PI / 2.15}
         minPolarAngle={0.14}
         autoRotate={idle}
@@ -177,6 +207,7 @@ export function PCBScene({
       <CameraRig
         focus={focus}
         settled={complete}
+        wide={Boolean(blocks && blocks.length > 0)}
         enabled={!userMoved}
         controls={controls}
       />

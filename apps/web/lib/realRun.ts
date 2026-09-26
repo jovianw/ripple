@@ -6,6 +6,7 @@
 // static image rather than something being assembled. Nothing that a viewer
 // would take as a fact is synthesised.
 
+import { componentsNamedIn } from "./blocks";
 import type { RunDoc } from "./live";
 import type {
   BuildSnapshot,
@@ -39,31 +40,6 @@ function chunk<T>(items: T[], groups: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
   return out;
-}
-
-/**
- * Which parts a checker failure is talking about.
- *
- * The failures are prose, but they name designators ("TEMP_SENSOR VCC has no
- * capacitor…"), so a word-boundary match against the real component labels is
- * a sound join rather than a guess. Parts that are not named stay normal.
- */
-function componentsNamedIn(
-  failures: { check: string; detail: string }[],
-  components: PCBComponent[],
-): Set<string> {
-  const named = new Set<string>();
-  for (const f of failures) {
-    const haystack = `${f.check} ${f.detail}`.toUpperCase();
-    for (const c of components) {
-      const label = c.label.toUpperCase();
-      if (label.length < 2) continue;
-      if (new RegExp(`\\b${label.replace(/[^A-Z0-9_]/g, "")}\\b`).test(haystack)) {
-        named.add(c.id);
-      }
-    }
-  }
-  return named;
 }
 
 const shortSpec = (text: string): string =>

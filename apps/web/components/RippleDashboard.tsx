@@ -7,12 +7,14 @@ import { ExecutionTrace } from "@/components/activity/ExecutionTrace";
 import { DeliverablesPanel } from "@/components/deliverables/DeliverablesPanel";
 import { HistoryGraph } from "@/components/build/HistoryGraph";
 import { RealBuildStatus } from "@/components/build/RealBuildStatus";
+import { BreakItUp } from "@/components/build/BreakItUp";
 import { SpecificationBar } from "@/components/build/SpecificationBar";
 import { StageRibbon } from "@/components/build/StageRibbon";
 import { Telemetry } from "@/components/build/Telemetry";
 import { ComponentInspector } from "@/components/pcb/ComponentInspector";
 import { PCBViewport } from "@/components/pcb/PCBViewport";
 import { WorldHud } from "@/components/pcb/WorldHud";
+import { blockSpec, retrySpec, splitIntoBlocks, type CheckFailure } from "@/lib/blocks";
 import { buildSnapshotsFromBoard, type RealBoardPayload } from "@/lib/realRun";
 import { deriveMetrics } from "@/lib/metrics";
 import { diffPCBStates } from "@/lib/pcbDiff";
@@ -114,6 +116,10 @@ export function RippleDashboard() {
   const [buildError, setBuildError] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  // Set when the worker's board failed its checks after every attempt: what it
+  // failed, and how many attempts it took. Drives the break-it-up view.
+  const [verdict, setVerdict] = useState<{ failures: CheckFailure[]; attempts: number } | null>(null);
+  const [failView, setFailView] = useState<"blocks" | "board">("blocks");
 
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   // Timers read liveness from a ref so scrubbing never has to cancel the run:
@@ -170,7 +176,7 @@ export function RippleDashboard() {
   // scripted run above never waits on Atlas, so a missing worker can't stall the demo.
   const [requestId, setRequestId] = useState<string | null>(null);
   const [requestNote, setRequestNote] = useState<string | null>(null);
-  const build = useCallback(() => {
+  const build = useCallback((text: string = prompt) => {
     // Don't animate a board nobody asked for. The worker takes a few seconds;
     // until it answers, the view waits on the real request and says so. The
     // scripted walkthrough is the fallback for when there is no worker at all.
@@ -178,6 +184,7 @@ export function RippleDashboard() {
     setRevealed(0);
     setCurrentIndex(-1);
     setSelected(null);
+    setVerdict(null);
     setShowDeliverables(false);
     setAwaiting("submitting");
     setStartedAt(Date.now());
@@ -189,14 +196,14 @@ export function RippleDashboard() {
     fetch("/api/spec", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text: prompt }),
+      body: JSON.stringify({ text }),
     })
       .then(async (r) => {
         const json = await r.json().catch(() => null);
         if (r.ok && json?.request_id) {
           setRequestId(json.request_id);
           setAwaiting("queued");
-          rememberBuild({ id: json.request_id, prompt, at: Date.now() });
+          rememberBuild({ id: json.request_id, prompt: text, at: Date.now() });
           return;
         }
         // Nothing is faked in its place: say why, and stop.
@@ -238,6 +245,16 @@ export function RippleDashboard() {
       setBuildError(null);
       setSource({ label: `real build · ${boardId.slice(0, 8)}` });
       setRealBoardId(boardId);
+      setFailView("blocks");
+      setVerdict(
+        payload.board.passed === true
+          ? null
+          : {
+              failures: payload.board.failures ?? [],
+              attempts:
+                runs.filter((r) => r.stage === "checks" || r.stage === "final").length || 1,
+            },
+      );
       play(
         buildSnapshotsFromBoard({
           spec: { _id: payload.board.spec_id ?? "free text", text: prompt },
@@ -252,6 +269,7 @@ export function RippleDashboard() {
   const reset = useCallback(() => {
     clearTimers();
     setRealBoardId(null);
+    setVerdict(null);
     liveRef.current = true;
     setIsLive(true);
     setIsRunning(false);
@@ -365,6 +383,23 @@ export function RippleDashboard() {
 
   const complete = current?.stage === "complete";
   const failing = current?.status === "error";
+
+  // The replay has reached the end and the board still fails: offer the split.
+  const failedFinal =
+    verdict !== null && isLive && !isRunning && revealed > 0 && revealed === snapshots.length;
+  const split = useMemo(
+    () => (failedFinal && verdict ? splitIntoBlocks(pcb, verdict.failures) : null),
+    [failedFinal, verdict, pcb],
+  );
+  const blocksShown =
+    split && failView === "blocks" && split.blocks.length > 1 ? split.blocks : null;
+  const rebuild = useCallback(
+    (text: string) => {
+      setPrompt(text);
+      build(text);
+    },
+    [build],
+  );
   const repairing = current?.stage === "repair" && !complete;
   const checkFailed = history.some((s) => s.status === "error");
   const progress = revealed === 0 ? 0 : (currentIndex + 1) / snapshots.length;
@@ -414,9 +449,10 @@ export function RippleDashboard() {
               selectedId={selectedLive?.id ?? null}
               changedIds={changedIds}
               snapshotVersion={current?.version ?? -1}
-              focusId={faultId}
+              focusId={blocksShown ? null : faultId}
               complete={complete}
               onSelect={setSelected}
+              blocks={blocksShown}
             />
           </div>
 
@@ -470,6 +506,22 @@ export function RippleDashboard() {
               ) : null}
             </div>
           )}
+
+          {split && verdict ? (
+            <div className="absolute right-6 top-5 max-h-[calc(100%-5.5rem)] overflow-y-auto">
+              <BreakItUp
+                split={split}
+                attempts={verdict.attempts}
+                view={failView}
+                onView={setFailView}
+                onRebuildBlock={(block) =>
+                  rebuild(blockSpec(block, pcb.components, prompt))
+                }
+                onRetryBoard={() => rebuild(retrySpec(prompt, verdict.failures))}
+                disabled={awaiting !== null}
+              />
+            </div>
+          ) : null}
 
           {!isLive ? (
             <div className="pointer-events-none absolute right-6 top-5 text-right">
