@@ -19,5 +19,6 @@ Every spec also gets the **base checks**: board renders, every trace routed, 0 D
 | h02_mcu_temp_logger | t07's MCU rules; t04's I2C rules; sensor SDA/SCL wired to the MCU's hardware I2C pins |
 | h03_rc_lowpass | Series R on the signal, cap from output to GND; SPICE: −3dB point 0.8–1.25 kHz |
 | h04_dual_led_driver | Each LED has its own series resistor (no shared resistor); LED_A and LED_B each drive exactly one LED; power LED + resistor across 5V/GND |
+| finale | t03's USB-C and regulator rules; t07's MCU rules (decoupling, reset pull-up, status LED, ISP header wired); temperature and humidity sensors each decoupled and on one I2C bus with one set of pull-ups to 3.3V on the MCU's hardware I2C pins; sensor address pins tied; power LED on 3.3V. Reference: 20 parts, built as three groups (power, mcu, sensors) |
 
 The rules in bold are the most common first-board mistakes, so the demo's "fails a hidden check" moment should come from them.
