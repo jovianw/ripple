@@ -1,12 +1,24 @@
 {
   "name": "board-forge",
   "private": true,
-  "engines": { "node": ">=22.13" },
-  "workspaces": ["apps/*", "packages/*"],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "typecheck": "tsc -b packages/types apps/worker"
+    "typecheck": "tsc -b packages/types apps/worker",
+    "smoke": "tsx scripts/smoke-board.tsx"
   },
   "devDependencies": {
+    "@tscircuit/checks": "0.0.208",
+    "@types/node": "^22.20.4",
+    "circuit-to-svg": "0.0.430",
+    "tscircuit": "0.0.2646",
+    "tsx": "4.23.15",
     "typescript": "^5.6.0"
-  }
+  },
+  "type": "module"
 }

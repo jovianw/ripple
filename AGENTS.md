@@ -27,9 +27,16 @@ Per-person task list and timings: DESIGN.md §6.
 - **One writer.** Only the worker writes to Atlas. The web app and MCP server use `MONGODB_URI_READER`.
 - **No secrets in git.** Keys live in `.env` (gitignored). Never commit `.env`, `.mcp.json`, or API keys; share keys privately.
 - **Watch OpenRouter spend.** Shared budget is $100 for the day. Log cost per call; use cheap models while developing.
-- **Pin tscircuit.** Don't upgrade it.
-- **Small commits, pull often.** Four people push to `main`: `git pull --rebase` before pushing; don't force-push.
+- **Pin tscircuit.** `tscircuit@0.0.2646` (exact). Don't upgrade it.
+
+## Branches
+
+- Work on your own branch, `dev-<name>` (e.g. `dev-marcos`). Don't commit straight to `main`.
+- Merge into `main` through a PR when a piece works; keep `main` runnable.
+- Pull `main` into your branch often. Don't force-push shared branches.
 
 ## Setup
 
 Node 22.13+. `cp .env.example .env`, fill in keys, `npm install`, `npm run typecheck`.
+
+Check tscircuit works: `npm run smoke` renders `examples/led-board.tsx` through the autorouter and DRC, prints trace/via/error counts, and writes `out/led-board.circuit.json` and `out/led-board.pcb.svg`. Expect 0 errors. The `tsci` CLI needs Bun; the smoke script uses the Node API instead.

@@ -12,3 +12,4 @@ dist/
 .vscode/mcp.json
 
 .DS_Store
+out/
