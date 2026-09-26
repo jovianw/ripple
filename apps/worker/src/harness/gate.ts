@@ -3,6 +3,7 @@
 // The gate never calls models itself: the batch runner (Arjun's runBatch) is passed in, so the same scoring
 // serves the gate, the ablation table and the UI.
 import type { HarnessConfig } from "@ripple/types";
+import { randomUUID } from "node:crypto";
 import type { Collection } from "mongodb";
 import { col, type StoredConfig, type StoredRun } from "../db.js";
 import { defaultWorkerId } from "./queue.js";
@@ -95,7 +96,10 @@ export function isBetter(candidate: HarnessScores, parent: HarnessScores): boole
   return candidate.cost_per_board_usd < parent.cost_per_board_usd;
 }
 
-const strip = ({ _id, gate_note, decided_at, claimed_by, claimed_at, ...c }: StoredConfig & { _id?: unknown }): HarnessConfig => c;
+const strip = ({ _id, gate_note, decided_at, claimed_by, claimed_at, succeeded_by, ...c }: StoredConfig & { _id?: unknown }): HarnessConfig => c;
+
+// Unique per process: two `evolve` runs on one machine share a hostname, so defaultWorkerId() alone can't tell their claims apart.
+const gateWorkerId = () => `${defaultWorkerId()}-${process.pid}-${randomUUID().slice(0, 8)}`;
 
 // A batch can take several minutes; a claim older than this is assumed abandoned (the process died) and can be retaken.
 const CLAIM_STALE_MS = 20 * 60 * 1000;
@@ -150,7 +154,7 @@ export async function evaluatePending(
   } = {},
 ): Promise<GateDecision | null> {
   const store = opts.store ?? defaultStore();
-  const workerId = opts.workerId ?? defaultWorkerId();
+  const workerId = opts.workerId ?? gateWorkerId();
   const claimed = await claimPending(store.harness, workerId);
   if (!claimed) return null;
 
@@ -181,15 +185,15 @@ export async function evaluatePending(
     // parent. If a sibling was already decided and is now current, this candidate's parent is stale: comparing it
     // against that stale parent could let a worse, later-numbered config outrank the sibling that's actually current
     // (currentConfig() just takes the newest "kept" version). Ask for a fresh proposal instead of spending a batch.
+    // "rejected", not "rolled_back": it was never scored, so it didn't score worse.
+    const stale = (current: number): GateDecision => ({
+      version: candidate.version,
+      parent: parent.version,
+      verdict: "rejected",
+      reasons: [`stale: proposed from v${parent.version}, but v${current} is current now; re-propose from it`],
+    });
     const head = await store.harness.findOne({ verdict: "kept" }, { sort: { version: -1 }, projection: { version: 1 } });
-    if (head && head.version !== parent.version) {
-      return await record({
-        version: candidate.version,
-        parent: parent.version,
-        verdict: "rolled_back",
-        reasons: [`stale: proposed from v${parent.version}, but v${head.version} is current now; re-propose from it`],
-      });
-    }
+    if (head && head.version !== parent.version) return await record(stale(head.version));
 
     const violations = guardrailViolations(parent, candidate);
     if (violations.length)
@@ -207,14 +211,35 @@ export async function evaluatePending(
     const better = isBetter(scores, parentScores);
     const fmt = (s: HarnessScores) =>
       `pass ${(s.checks_passed * 100).toFixed(0)}%, ${s.attempts_per_board.toFixed(1)} attempts, $${s.cost_per_board_usd.toFixed(4)}/board`;
-    return await record({
+    const decision: GateDecision = {
       version: candidate.version,
       parent: parent.version,
       verdict: better ? "kept" : "rolled_back",
       reasons: [`v${candidate.version} ${fmt(scores)} vs v${parent.version} ${fmt(parentScores)}`],
       scores,
       parentScores,
-    });
+    };
+    if (!better) return await record(decision);
+
+    // A sibling claimed after this one passed the check above and was scored against the same parent in parallel.
+    // Only one child may be kept on top of a parent: take the parent atomically; the loser is stale.
+    const won = await store.harness.findOneAndUpdate(
+      { version: parent.version, succeeded_by: { $exists: false } },
+      { $set: { succeeded_by: candidate.version } },
+    );
+    if (!won) {
+      const winner = await store.harness.findOne({ version: parent.version }, { projection: { succeeded_by: 1 } });
+      return await record({ ...stale(winner?.succeeded_by ?? parent.version), scores, parentScores });
+    }
+    try {
+      return await record(decision);
+    } catch (err) {
+      await store.harness.updateOne(
+        { version: parent.version, succeeded_by: candidate.version },
+        { $unset: { succeeded_by: "" } },
+      );
+      throw err;
+    }
   } catch (err) {
     // Release the claim so a retry doesn't have to wait out CLAIM_STALE_MS; leave the version pending.
     await store.harness.updateOne(

@@ -1,6 +1,6 @@
 // Gate concurrency: two callers racing evaluatePending must never score/record the same version twice,
 // and a candidate proposed from a parent that's since been superseded must not silently outrank the sibling
-// that replaced it. Run: npm run test:gate
+// that replaced it. Run: npm run test:gate (never connects: gate.ts imports db.ts, which only needs MONGODB_URI set)
 import { test, describe } from "node:test"
 import assert from "node:assert/strict"
 import type { HarnessConfig } from "@ripple/types"
@@ -90,7 +90,7 @@ describe("evaluatePending concurrency", () => {
     assert.equal((final as StoredConfig).claimed_by, undefined, "claim is released once a verdict is recorded")
   })
 
-  test("a candidate whose parent was superseded is rolled back without spending a batch", async () => {
+  test("a candidate whose parent was superseded is rejected as stale without spending a batch", async () => {
     const harness = fakeHarness([
       cfg({ version: 0, parent: null, verdict: "kept" }),
       // v1 already decided "kept" off v0 (as if a first evolve run finished first) — it's current now.
@@ -103,10 +103,38 @@ describe("evaluatePending concurrency", () => {
     const decision = await evaluatePending(noBatch, { store: s, workerId: "worker-a" })
 
     assert.ok(decision)
-    assert.equal(decision.verdict, "rolled_back")
+    assert.equal(decision.verdict, "rejected")
     assert.match(decision.reasons.join(" "), /stale/)
     const final = (await harness.findOne({ version: 2 })) as StoredConfig
-    assert.equal(final.verdict, "rolled_back")
+    assert.equal(final.verdict, "rejected")
     assert.equal(final.claimed_by, undefined)
+  })
+
+  test("two sibling proposals scored in parallel can't both be kept", async () => {
+    const harness = fakeHarness([
+      cfg({ version: 0, parent: null, verdict: "kept", scores: { checks_passed: 0.5, attempts_per_board: 3, cost_per_board_usd: 0.01 } }),
+      cfg({ version: 1, parent: 0, verdict: "pending" }),
+      cfg({ version: 2, parent: 0, verdict: "pending" }),
+    ])
+    // Every batch scores better than v0, and takes long enough that both callers are past the claim-time check.
+    const better = { checks_passed: 0.9, attempts_per_board: 1, cost_per_board_usd: 0.001, boards: 8 }
+    const runs = { aggregate: () => ({ toArray: async () => [better] }) } as unknown as GateStore["runs"]
+    const s: GateStore = { harness, runs }
+    const slowBatch: RunBatch = async () => {
+      await new Promise((r) => setTimeout(r, 10))
+      return { boardIds: ["b"] }
+    }
+
+    const decisions = await Promise.all([
+      evaluatePending(slowBatch, { store: s, workerId: "worker-a" }),
+      evaluatePending(slowBatch, { store: s, workerId: "worker-b" }),
+    ])
+
+    assert.deepEqual(decisions.map((d) => d?.verdict).sort(), ["kept", "rejected"])
+    const kept = decisions.find((d) => d?.verdict === "kept")!
+    const lost = decisions.find((d) => d?.verdict === "rejected")!
+    assert.match(lost.reasons.join(" "), new RegExp(`stale: .* v${kept.version} is current`))
+    assert.equal((await harness.findOne({ version: 0 }))?.succeeded_by, kept.version)
+    assert.equal((await harness.findOne({ verdict: "kept" }, { sort: { version: -1 } }))?.version, kept.version)
   })
 })

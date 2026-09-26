@@ -59,6 +59,8 @@ export type StoredConfig = HarnessConfig & {
   /** Set while a gate is evaluating this pending version, so two concurrent `evolve` runs don't score it twice. */
   claimed_by?: string;
   claimed_at?: string;
+  /** The one child version the gate kept on top of this one; claimed atomically so two sibling proposals can't both be kept. */
+  succeeded_by?: number;
 };
 /** One row of `npm run ablation`'s table (DESIGN.md §7), so Jack can show it instead of fixture data. */
 export interface StoredAblationRow {
