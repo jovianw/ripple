@@ -270,6 +270,38 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 - [ ] **2:30–3:30** README, project description, demo script
 - [ ] **4:30–5:00** Lead video recording and submission
 
+### Who does what after 12:30 (no overlaps)
+
+State at 12:35: all pieces of the single-board loop are on `main`, but the 12:30 checkpoint has not passed yet. The only attempt (12:19) failed on the JLCPCB LED polarity DRC error, which `388dc2d` (parts engine off) fixed afterwards. Not wired yet: critic, router `complete` adapter, config passed into the loop.
+
+**Arjun** (critical path)
+1. Rerun the checkpoint on one training spec with the cheap model; tick the 12:30 checkpoint when a board passes.
+2. Router adapter `complete(system, user, schema)` with JSON output. The critic and the planner both take it.
+3. Wire the critic into the loop: on failure, `runCritic(..., { complete, addLesson })`; its diagnosis goes into the next attempt.
+4. Loop takes the config: `runBoard(specId, config, opts)` and `runBatch(specIds, config)`. This is the only batch runner; the config gate and the ablation both call it.
+5. Meta-agent: batch failures → `propose()` from `harness/config.ts`.
+6. Ablation: `runBatch` on held-out specs for v0 and the evolved config, with `writeMemory: false`. Read-only MCP access last.
+
+**Jovian** (scores and decides; never runs models)
+1. `scoreVersion(version)`: aggregates `runs` into `checks_passed`, `attempts_per_board`, `cost_per_board_usd`. The gate and the ablation table both use it; don't write a second one.
+2. Config gate `evaluatePending(runBatch)`: runs the pending version through the injected `runBatch`, scores it, compares with its parent; kept, rolled back, or rejected (removes a rule, gives the coder MCP tools, turns off connectivity-before-route, etc.).
+3. Change streams: meta-agent trigger when a batch finishes, and a runs feed helper for the UI. No critic trigger: the loop calls the critic directly.
+4. 3:00: help run the finale through the queue with kill-and-resume.
+
+**Marcos**
+1. Finale queue handler: planner work items → `runCoder` per subcircuit → `checkInterface` → assembler, driven by `enqueue`/`runQueue`. Only Marcos builds this; it's where planner, coder, checker and assembler meet.
+2. Review Arjun's `complete` adapter against the critic schema; check the first lessons meet the quality gate.
+3. Dry-run the finale through the queue early (a stub coder is fine) so kill-and-resume is proven before the 3:30 freeze.
+
+**Interfaces**
+| Owner | Provides | Used by |
+|---|---|---|
+| Arjun | `complete(system, user, schema)` | critic, planner |
+| Arjun | `runBoard(specId, config, opts)`, `runBatch(specIds, config)` | config gate, ablation, meta-agent |
+| Jovian | `scoreVersion(version)`, `evaluatePending(runBatch)` | ablation table, meta-agent loop, UI |
+| Jovian | `enqueue`, `runQueue`, memory, `propose` (see `apps/worker/src/harness/README.md`) | Marcos, Arjun |
+| Marcos | finale queue handler | finale demo |
+
 ### Handoffs
 | By | From → To | What |
 |---|---|---|
