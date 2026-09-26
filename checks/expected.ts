@@ -80,6 +80,8 @@ export interface ResistorRule {
   b: NetRef;
   min_ohms?: number;
   max_ohms?: number;
+  /** Also accept two resistors in series through one intermediate node (range applies to the sum). */
+  series_ok?: boolean;
 }
 
 export interface TiedRule {
