@@ -11,7 +11,8 @@
   "scripts": {
     "typecheck": "tsc -b packages/types apps/worker",
     "smoke": "tsx scripts/smoke-board.tsx",
-    "test:checks": "TSX_TSCONFIG_PATH=checks/tsconfig.json tsx --test checks/**/*.test.tsx"
+    "test:checks": "TSX_TSCONFIG_PATH=checks/tsconfig.json tsx --test checks/**/*.test.tsx",
+    "test:parts": "tsx --test apps/worker/src/tools/parts-whitelist.test.ts"
   },
   "devDependencies": {
     "@tscircuit/checks": "0.0.208",
