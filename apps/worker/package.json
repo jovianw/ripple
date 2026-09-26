@@ -3,6 +3,11 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@board-forge/types": "*"
+    "@board-forge/types": "*",
+    "tscircuit": "0.0.2646",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0"
   }
 }
