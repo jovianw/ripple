@@ -1,0 +1,15 @@
+{
+  "name": "@ripple/worker",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@openrouter/ai-sdk-provider": "3.1.0",
+    "@ripple/types": "*",
+    "ai": "7.0.116",
+    "langsmith": "0.10.5",
+    "mongodb": "7.6.0",
+    "react": "19.3.0",
+    "tscircuit": "0.0.2646",
+    "zod": "3.25.76"
+  }
+}

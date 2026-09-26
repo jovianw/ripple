@@ -1,0 +1,35 @@
+import { MongoClient } from "mongodb";
+import type { HarnessConfig, RunResult } from "@ripple/types";
+
+const uri = process.env.MONGODB_URI;
+if (!uri) throw new Error("MONGODB_URI is not set; copy .env.example to .env");
+
+export const COLLECTIONS = [
+  "harness_versions",
+  "specs",
+  "subcircuits",
+  "boards",
+  "work_queue",
+  "runs",
+  "lessons",
+] as const;
+
+// One shared client for the whole worker. Only the worker writes design state.
+export const client = new MongoClient(uri, { appName: "ripple-worker" });
+export const db = client.db(process.env.MONGODB_DB ?? "ripple");
+
+export const col = {
+  harness: db.collection<HarnessConfig>("harness_versions"),
+  specs: db.collection("specs"),
+  subcircuits: db.collection("subcircuits"),
+  boards: db.collection("boards"),
+  queue: db.collection("work_queue"),
+  runs: db.collection<RunResult>("runs"),
+  lessons: db.collection("lessons"),
+};
+
+export async function connect() {
+  await client.connect();
+  await db.command({ ping: 1 }); // fails fast if the URI or IP allowlist is wrong
+  return db;
+}

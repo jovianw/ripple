@@ -1,0 +1,23 @@
+{
+  "name": "ripple",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.2",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "setup:indexes": "tsx --env-file-if-exists=.env scripts/setup-indexes.ts",
+    "green": "tsx --env-file-if-exists=.env scripts/green-check.ts",
+    "typecheck": "tsc -p ."
+  },
+  "devDependencies": {
+    "@types/node": "24.19.0",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  }
+}

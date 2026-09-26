@@ -1,0 +1,4 @@
+[install]
+# tscircuit is built with bun and relies on hoisted peers; root scripts/ also import worker deps.
+linker = "hoisted"
+exact = true
