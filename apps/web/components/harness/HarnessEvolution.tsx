@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { versionDiff } from "@/lib/harness-observability";
 import type { HarnessDoc } from "@/lib/live";
+import { Disclosure } from "./primitives";
 
 const VERDICT_INK: Record<string, string> = {
   kept: "text-good",
@@ -141,8 +142,8 @@ export function HarnessEvolution({ versions }: { versions: HarnessDoc[] }) {
     <div>
       <EvolutionChart versions={versions} />
 
-      <ol className="mt-6 space-y-4">
-        {[...versions].reverse().map((v) => {
+      <ol className="mt-6 space-y-3">
+        {[...versions].reverse().map((v, i) => {
           const parent = v.parent === null ? undefined : byVersion.get(v.parent);
           const changes = versionDiff(parent, v);
 
@@ -155,54 +156,66 @@ export function HarnessEvolution({ versions }: { versions: HarnessDoc[] }) {
                 <span className={`text-[12px] ${VERDICT_INK[v.verdict ?? ""] ?? "text-dim"}`}>
                   {v.verdict ?? "—"}
                 </span>
+                {v.scores?.checks_passed !== undefined ? (
+                  <span className="text-[11px] text-faint">
+                    checks <span className="font-mono text-dim">{pct(v.scores.checks_passed)}</span>
+                  </span>
+                ) : null}
               </div>
 
-              {changes.length > 0 ? (
-                <ul className="mt-1.5 space-y-0.5">
-                  {changes.map((c, i) => (
-                    <li key={`${c.field}-${i}`} className="font-mono text-[11px]">
-                      <span className="text-faint">{c.field} </span>
-                      <span className="text-ghost">{c.from}</span>
-                      <span className="text-ghost"> → </span>
-                      <span className="text-dim">{c.to}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
+              <div className="mt-1.5">
+                <Disclosure
+                  label={`${changes.length} rule change${changes.length === 1 ? "" : "s"}, rationale, scores`}
+                  defaultOpen={i === 0}
+                >
+                  {changes.length > 0 ? (
+                    <ul className="space-y-0.5">
+                      {changes.map((c, ci) => (
+                        <li key={`${c.field}-${ci}`} className="font-mono text-[11px]">
+                          <span className="text-faint">{c.field} </span>
+                          <span className="text-ghost">{c.from}</span>
+                          <span className="text-ghost"> → </span>
+                          <span className="text-dim">{c.to}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
 
-              {v.rationale ? (
-                <p className="mt-1.5 max-w-3xl text-[12px] leading-snug text-dim">
-                  {v.rationale}
-                </p>
-              ) : null}
-              {v.gate_note ? (
-                <p className="mt-1 max-w-3xl text-[12px] leading-snug text-faint">
-                  Gate: {v.gate_note}
-                </p>
-              ) : null}
+                  {v.rationale ? (
+                    <p className="mt-1.5 max-w-3xl text-[12px] leading-snug text-dim">
+                      {v.rationale}
+                    </p>
+                  ) : null}
+                  {v.gate_note ? (
+                    <p className="mt-1 max-w-3xl text-[12px] leading-snug text-faint">
+                      Gate: {v.gate_note}
+                    </p>
+                  ) : null}
 
-              {v.scores ? (
-                <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1">
-                  <ScoreDelta
-                    label="checks passed"
-                    from={parent?.scores?.checks_passed}
-                    to={v.scores.checks_passed}
-                    format={(n) => `${(n * 100).toFixed(0)}%`}
-                  />
-                  <ScoreDelta
-                    label="attempts"
-                    from={parent?.scores?.attempts_per_board}
-                    to={v.scores.attempts_per_board}
-                    format={(n) => n.toFixed(1)}
-                  />
-                  <ScoreDelta
-                    label="cost"
-                    from={parent?.scores?.cost_per_board_usd}
-                    to={v.scores.cost_per_board_usd}
-                    format={(n) => `$${n.toFixed(4)}`}
-                  />
-                </div>
-              ) : null}
+                  {v.scores ? (
+                    <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1">
+                      <ScoreDelta
+                        label="checks passed"
+                        from={parent?.scores?.checks_passed}
+                        to={v.scores.checks_passed}
+                        format={(n) => `${(n * 100).toFixed(0)}%`}
+                      />
+                      <ScoreDelta
+                        label="attempts"
+                        from={parent?.scores?.attempts_per_board}
+                        to={v.scores.attempts_per_board}
+                        format={(n) => n.toFixed(1)}
+                      />
+                      <ScoreDelta
+                        label="cost"
+                        from={parent?.scores?.cost_per_board_usd}
+                        to={v.scores.cost_per_board_usd}
+                        format={(n) => `$${n.toFixed(4)}`}
+                      />
+                    </div>
+                  ) : null}
+                </Disclosure>
+              </div>
             </li>
           );
         })}
