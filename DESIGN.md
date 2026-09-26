@@ -215,6 +215,24 @@ LANGSMITH_PROJECT=ripple
 
 ---
 
+## 5b. Deliverables
+
+Every finished board ships as files, not just a picture. `buildDeliverables(circuitJson)` (`apps/worker/src/export/`, `npm run export <board>`) produces:
+
+| Deliverable | For |
+|---|---|
+| Gerber layers + Excellon drill (`fabrication/`, also `<name>-gerbers.zip`) | Ordering the board from a board house |
+| BOM with part numbers, pick-and-place, assembly drawing (`assembly/`) | Sourcing and assembly |
+| KiCad project: `.kicad_pro`, `.kicad_sch`, `.kicad_pcb` (`kicad/`) | Opening and editing in KiCad |
+| 3D model (`3d/<name>.glb`) | 3D viewer |
+| PCB and schematic images, SVG + PNG (`images/`) | Previews, report, video |
+| Netlist (`netlist.csv`), SPICE netlist (`simulation/`) | Review, simulation |
+| Circuit JSON and tscircuit source (`design/`) | Re-rendering, the "why?" view |
+| Design report (`report.md`, `report.json`) | Spec, check results, metrics, grouped BOM, file index, limits |
+| `manifest.json` | File list with categories and MIME types, for the front end |
+
+---
+
 ## 6. Tasks
 
 Times are for Sept 26. Checkpoints are shared; everything else has one owner.
@@ -239,9 +257,10 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 - [x] **11:00–12:30** 8 training and 4 held-out specs (`specs/specs.json`); hidden checker returning `RunResult` (`checks/`, `npm run test:checks`); reference board per spec
 - [x] **12:30–1:30** Critic agent (code and prompt) and lesson extraction into Atlas (`apps/worker/src/agents/critic/`: strict JSON output, lesson quality gate, no lessons from held-out specs; `npm run try:critic`. Takes Arjun's router as `complete` and Jovian's `addLesson`)
 - [x] **1:30–2:30** Planner agent (`apps/worker/src/agents/planner/`: returns work items for `queue.enqueue`, validated in code, honors `plan_first` and `split_over_parts`, replans keep done items; `checkInterface` for step checks; `npm run test:planner`, `npm run try:planner`)
-- [ ] Assembler (Fable agent on `dev-marcos-assembler`)
+- [x] Assembler (`apps/worker/src/assembler/`, `npm run test:assembler`)
 - [x] Parts whitelist (`parts/whitelist.json` v2, `npm run verify:parts`)
 - [x] Finale board spec (`specs/finale.json`), checks, and 20-part reference board in three groups (`npm run smoke finale`)
+- [x] Board deliverables export (§5b; `npm run export <board>`, `npm run test:export`)
 - [ ] **2:30–3:30** Finale first full run through the work queue
 - [ ] Present the live demo
 
@@ -267,8 +286,41 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 - [ ] **11:00–12:30** Spec input, PCB and schematic view, live run feed (fixtures)
 - [ ] **12:30–1:30** Local change-stream route; Vercel deployment with polling and preview deploys per PR; switch to real data
 - [ ] **1:30–2:30** Config diff viewer, ablation table, "why?" trace view
+- [ ] **Deliverables panel** on each board page (§5b, `apps/worker/src/export/README.md`): API route that builds deliverables from the board's `circuit_json`; "Download all" (zip) and "Download Gerbers" buttons; PCB and schematic previews; 3D viewer for the `.glb`; BOM table; rendered `report.md`; file list from `manifest.json`
 - [ ] **2:30–3:30** README, project description, demo script
 - [ ] **4:30–5:00** Lead video recording and submission
+
+### Who does what after 12:30 (no overlaps)
+
+State at 12:35: all pieces of the single-board loop are on `main`, but the 12:30 checkpoint has not passed yet. The only attempt (12:19) failed on the JLCPCB LED polarity DRC error, which `388dc2d` (parts engine off) fixed afterwards. Not wired yet: critic, router `complete` adapter, config passed into the loop.
+
+**Arjun** (critical path)
+1. Rerun the checkpoint on one training spec with the cheap model; tick the 12:30 checkpoint when a board passes.
+2. Router adapter `complete(system, user, schema)` with JSON output. The critic and the planner both take it.
+3. Wire the critic into the loop: on failure, `runCritic(..., { complete, addLesson })`; its diagnosis goes into the next attempt.
+4. Loop takes the config: `runBoard(specId, config, opts)` and `runBatch(specIds, config)`. This is the only batch runner; the config gate and the ablation both call it.
+5. Meta-agent: batch failures → `propose()` from `harness/config.ts`.
+6. Ablation: `runBatch` on held-out specs for v0 and the evolved config, with `writeMemory: false`. Read-only MCP access last.
+
+**Jovian** (scores and decides; never runs models)
+1. `scoreVersion(version)`: aggregates `runs` into `checks_passed`, `attempts_per_board`, `cost_per_board_usd`. The gate and the ablation table both use it; don't write a second one.
+2. Config gate `evaluatePending(runBatch)`: runs the pending version through the injected `runBatch`, scores it, compares with its parent; kept, rolled back, or rejected (removes a rule, gives the coder MCP tools, turns off connectivity-before-route, etc.).
+3. Change streams: meta-agent trigger when a batch finishes, and a runs feed helper for the UI. No critic trigger: the loop calls the critic directly.
+4. 3:00: help run the finale through the queue with kill-and-resume.
+
+**Marcos**
+1. Finale queue handler: planner work items → `runCoder` per subcircuit → `checkInterface` → assembler, driven by `enqueue`/`runQueue`. Only Marcos builds this; it's where planner, coder, checker and assembler meet.
+2. Review Arjun's `complete` adapter against the critic schema; check the first lessons meet the quality gate.
+3. Dry-run the finale through the queue early (a stub coder is fine) so kill-and-resume is proven before the 3:30 freeze.
+
+**Interfaces**
+| Owner | Provides | Used by |
+|---|---|---|
+| Arjun | `complete(system, user, schema)` | critic, planner |
+| Arjun | `runBoard(specId, config, opts)`, `runBatch(specIds, config)` | config gate, ablation, meta-agent |
+| Jovian | `scoreVersion(version)`, `evaluatePending(runBatch)` | ablation table, meta-agent loop, UI |
+| Jovian | `enqueue`, `runQueue`, memory, `propose` (see `apps/worker/src/harness/README.md`) | Marcos, Arjun |
+| Marcos | finale queue handler | finale demo |
 
 ### Handoffs
 | By | From → To | What |
@@ -315,7 +367,7 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 | 0:00–0:40 | Judge's spec; first attempt fails a hidden check; lesson and fix appear | It checks itself against specs it can't see |
 | 0:40–1:20 | Config diff, including a rejected change | The harness evolves, with guardrails |
 | 1:20–2:00 | Ablation table | The harness is doing the work |
-| 2:00–2:40 | Finale board from the queue; kill the worker, restart, it resumes | Long horizon and durability |
+| 2:00–2:40 | Finale board from the queue; kill the worker, restart, it resumes; download its Gerbers, BOM and KiCad project | Long horizon, durability, and a manufacturable result |
 | 2:40–3:00 | "The model didn't get smarter. The harness did." | The thesis |
 
 ---
