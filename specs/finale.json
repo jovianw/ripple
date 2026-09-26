@@ -1,0 +1,4 @@
+{
+  "_id": "finale",
+  "text": "A USB-C powered sensor node. Regulate USB 5V down to 3.3V with a linear regulator. A 3.3V microcontroller reads an I2C temperature sensor and an I2C humidity sensor on one shared bus. Add a power LED on the 3.3V rail and a status LED driven by the microcontroller. Include a 6-pin programming header (MISO, VCC, SCK, MOSI, RESET, GND); its VCC pin is the 3.3V rail."
+}

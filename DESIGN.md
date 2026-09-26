@@ -227,20 +227,21 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 | Jack | Front end: UI, PCB preview, Vercel deploys, README, video and submission |
 
 ### Everyone
-- [ ] **10:30–11:15** Kickoff: repo, pinned versions, decisions table, freeze `HarnessConfig` and `RunResult`, index setup, green check
+- [x] **10:30–11:15** Kickoff: repo, pinned versions, decisions table, freeze `HarnessConfig` and `RunResult`, index setup, green check (`npm run green` all green)
 - [ ] **12:30** Checkpoint: one board goes spec → routed PCB → passes hidden checks under a stored config version
 - [ ] **3:30** Feature freeze; record a full backup run
 - [ ] **3:30–4:30** Polish and rehearse the demo twice
 - [ ] **4:30–5:00** Record the 1-minute video on site and submit
 
 ### Marcos: hardware logic, critic, planner, demo
-- [x] **Before 10:30** Install tscircuit on every laptop; build an LED-plus-resistor board through the autorouter (`npm run smoke`)
+- [ ] **Before 10:30** Install tscircuit on every laptop; build an LED-plus-resistor board through the autorouter (`npm run smoke`; done on Marcos's laptop)
 - [ ] 10-minute PCB primer for the team at kickoff
-- [x] **11:00–12:30** 8 training and 4 held-out specs (`specs/specs.json`); hidden checker (connectivity, pull-up, decoupling, DRC) returning `RunResult` (`checks/`, `npm run test:checks`)
-- [ ] **12:30–1:30** Critic agent (code and prompt) and lesson extraction into Atlas
-- [ ] **1:30–2:30** Planner agent and assembler
+- [x] **11:00–12:30** 8 training and 4 held-out specs (`specs/specs.json`); hidden checker returning `RunResult` (`checks/`, `npm run test:checks`); reference board per spec
+- [x] **12:30–1:30** Critic agent (code and prompt) and lesson extraction into Atlas (`apps/worker/src/agents/critic/`: strict JSON output, lesson quality gate, no lessons from held-out specs; `npm run try:critic`. Takes Arjun's router as `complete` and Jovian's `addLesson`)
+- [ ] **1:30–2:30** Planner agent and assembler (assembler: Fable agent on `dev-marcos-assembler`)
 - [x] Parts whitelist (`parts/whitelist.json` v2, `npm run verify:parts`)
-- [ ] **2:30–3:30** Finale board spec, checks, first full run
+- [x] Finale board spec (`specs/finale.json`), checks, and 20-part reference board in three groups (`npm run smoke finale`)
+- [ ] **2:30–3:30** Finale first full run through the work queue
 - [ ] Present the live demo
 
 ### Jovian: harness core and memory

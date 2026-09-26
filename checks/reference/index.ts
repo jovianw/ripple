@@ -11,6 +11,7 @@ import { H01Reference } from "./h01_usbc_humidity_node.tsx"
 import { H02Reference } from "./h02_mcu_temp_logger.tsx"
 import { H03Reference } from "./h03_rc_lowpass.tsx"
 import { H04Reference } from "./h04_dual_led_driver.tsx"
+import { FinaleReference } from "./finale.tsx"
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const referenceBoards: Record<string, () => any> = {
@@ -26,4 +27,5 @@ export const referenceBoards: Record<string, () => any> = {
   h02_mcu_temp_logger: H02Reference,
   h03_rc_lowpass: H03Reference,
   h04_dual_led_driver: H04Reference,
+  finale: FinaleReference,
 }
