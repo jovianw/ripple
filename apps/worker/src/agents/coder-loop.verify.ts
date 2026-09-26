@@ -3,17 +3,19 @@
 // Run with:
 //   npx tsx --env-file-if-exists=.env apps/worker/src/agents/coder-loop.verify.ts
 import { client } from "../db.js";
-import { runCheckpointLoop } from "./coder-loop.js";
+import { currentConfig } from "../harness/config.js";
+import { runBoard } from "./coder-loop.js";
 
 async function main() {
-  const specId = "t01_led_indicator";
-  const specText = "A small board powered from a 2-pin header (5V, GND) that lights a red indicator LED at about 3 mA.";
+  const specId = process.argv[2] ?? "t01_led_indicator";
+  const config = await currentConfig();
 
-  const result = await runCheckpointLoop(specId, specText);
+  const result = await runBoard(specId, config);
 
   console.log(
     JSON.stringify(
       {
+        specId: result.specId,
         boardId: result.boardId,
         attempts: result.attempts,
         passed: result.runResult.passed,
@@ -21,6 +23,8 @@ async function main() {
         metrics: result.runResult.metrics,
         model: result.runResult.model,
         cost_usd: result.runResult.cost_usd,
+        criticEscalated: result.criticResults.some((c) => c.escalate),
+        lessonsWritten: result.criticResults.flatMap((c) => c.saved_lesson_ids),
       },
       null,
       2,

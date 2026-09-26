@@ -228,7 +228,7 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 
 ### Everyone
 - [x] **10:30–11:15** Kickoff: repo, pinned versions, decisions table, freeze `HarnessConfig` and `RunResult`, index setup, green check (`npm run green` all green)
-- [ ] **12:30** Checkpoint: one board goes spec → routed PCB → passes hidden checks under a stored config version
+- [x] **12:30** Checkpoint: one board goes spec → routed PCB → passes hidden checks under a stored config version (`t01_led_indicator`, cheap model, 1 attempt, `apps/worker/src/agents/coder-loop.ts` `runBoard`; `RunResult` stored in `runs`, subcircuit credited to the library)
 - [ ] **3:30** Feature freeze; record a full backup run
 - [ ] **3:30–4:30** Polish and rehearse the demo twice
 - [ ] **4:30–5:00** Record the 1-minute video on site and submit
@@ -255,9 +255,9 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 - [ ] **3:00–3:30** Help run the finale board through the queue with kill-and-resume
 
 ### Arjun: agents, tools, models
-- [ ] **10:30–11:30** Tool wrappers: compile, autoroute, DRC, metrics → `RunResult`
-- [ ] **11:30–12:30** Model router (OpenRouter, cost logging, LangSmith) and coder agent
-- [ ] **12:30–1:00** Connect to the hidden checker for the checkpoint
+- [x] **10:30–11:30** Tool wrappers: compile, evaluate, DRC, metrics → `CircuitJson` (`apps/worker/src/tools/{compile,evaluate,drc,metrics}.ts`; `renderUntilSettled` autoroutes, no separate autoroute step needed)
+- [x] **11:30–12:30** Model router (OpenRouter, cost logging via `usage.include`, LangSmith tracing) and coder agent (`apps/worker/src/tools/router.ts`: `callModel`, `createComplete` for the critic/planner's JSON-schema `complete`; `apps/worker/src/agents/coder.ts`)
+- [x] **12:30–1:00** Connect to the hidden checker for the checkpoint (`apps/worker/src/agents/coder-loop.ts`: `runBoard`/`runBatch` call `checks/index.ts`'s `runChecks`, store `RunResult`, retry through the critic up to `repair_budget`)
 - [ ] **1:00–2:00** Read-only MCP access for the critic and meta-agent
 - [ ] **2:00–3:00** Meta-agent: batch results → proposed config change
 - [ ] **3:00–3:30** Ablation runner on held-out specs
