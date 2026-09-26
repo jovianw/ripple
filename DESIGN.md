@@ -201,7 +201,7 @@ board-forge/
 ```
 MONGODB_URI=                 # writer user, worker only
 MONGODB_URI_READER=          # reader user, web + MCP
-MONGODB_DB=boardforge
+MONGODB_DB=ripple
 MDB_MCP_CONNECTION_STRING=   # same as reader
 OPENROUTER_API_KEY=
 VOYAGE_API_KEY=

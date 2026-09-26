@@ -52,7 +52,7 @@ await check("reader", async () => {
   const [uri] = env("MONGODB_URI_READER");
   const client = new MongoClient(uri, { appName: "board-forge-green-check" });
   try {
-    const db = client.db(process.env.MONGODB_DB || "boardforge");
+    const db = client.db(process.env.MONGODB_DB || "ripple");
     await db.command({ ping: 1 });
     try {
       await db.collection("_green_check").insertOne({ ts: new Date() });

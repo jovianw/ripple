@@ -17,7 +17,7 @@ export const COLLECTIONS = [
 ] as const;
 
 export const client = new MongoClient(uri, { appName: "board-forge-worker" });
-export const db = client.db(process.env.MONGODB_DB || "boardforge");
+export const db = client.db(process.env.MONGODB_DB || "ripple");
 
 export const col = {
   harness: db.collection<HarnessConfig>("harness_versions"),
