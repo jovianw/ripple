@@ -18,6 +18,7 @@
     "verify:parts": "tsx scripts/verify-parts.tsx",
     "test:checks": "TSX_TSCONFIG_PATH=checks/tsconfig.json tsx --test checks/**/*.test.tsx",
     "test:assembler": "tsx --test apps/worker/src/assembler/assembler.test.ts",
+    "test:gate": "tsx --env-file-if-exists=.env --test apps/worker/src/harness/gate.test.ts",
     "try:critic": "tsx --env-file-if-exists=.env scripts/try-critic.tsx",
     "test:planner": "tsx --test apps/worker/src/agents/planner/planner.test.tsx",
     "try:planner": "tsx --env-file-if-exists=.env scripts/try-planner.ts",

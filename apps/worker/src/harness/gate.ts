@@ -5,6 +5,7 @@
 import type { HarnessConfig } from "@ripple/types";
 import type { Collection } from "mongodb";
 import { col, type StoredConfig, type StoredRun } from "../db.js";
+import { defaultWorkerId } from "./queue.js";
 
 type HarnessScores = NonNullable<HarnessConfig["scores"]>;
 
@@ -94,7 +95,23 @@ export function isBetter(candidate: HarnessScores, parent: HarnessScores): boole
   return candidate.cost_per_board_usd < parent.cost_per_board_usd;
 }
 
-const strip = ({ _id, gate_note, decided_at, ...c }: StoredConfig & { _id?: unknown }): HarnessConfig => c;
+const strip = ({ _id, gate_note, decided_at, claimed_by, claimed_at, ...c }: StoredConfig & { _id?: unknown }): HarnessConfig => c;
+
+// A batch can take several minutes; a claim older than this is assumed abandoned (the process died) and can be retaken.
+const CLAIM_STALE_MS = 20 * 60 * 1000;
+
+/**
+ * Atomically claims the oldest pending version nobody else currently holds, so two concurrent `evolve` runs
+ * (or a leftover process from an earlier one) never score and record the same version twice.
+ */
+async function claimPending(harness: Collection<StoredConfig>, workerId: string): Promise<StoredConfig | null> {
+  const stale = new Date(Date.now() - CLAIM_STALE_MS).toISOString();
+  return harness.findOneAndUpdate(
+    { verdict: "pending", $or: [{ claimed_by: { $exists: false } }, { claimed_at: { $lt: stale } }] },
+    { $set: { claimed_by: workerId, claimed_at: new Date().toISOString() } },
+    { sort: { version: 1 }, returnDocument: "after" },
+  );
+}
 
 async function runAndScore(config: HarnessConfig, runBatch: RunBatch, store: GateStore): Promise<Scores> {
   const { boardIds } = await runBatch(config);
@@ -113,27 +130,33 @@ export interface GateDecision {
 }
 
 /**
- * Decides the oldest pending version:
+ * Decides the oldest pending version nobody else is already evaluating:
  *   guardrail violation → "rejected" (no batch run);
  *   otherwise run a batch under it (and under its parent if the parent has no scores yet),
  *   then "kept" if it scores better than its parent, else "rolled_back".
- * Returns null when nothing is pending. Every decision is stored on the version (scores, verdict, gate_note).
+ * Returns null when nothing claimable is pending. Every decision is stored on the version (scores, verdict, gate_note).
+ *
+ * Claims the version first (`claimPending`) so two concurrent callers (two people running `npm run evolve`, or a
+ * leftover process from an earlier one) never both score and record the same version — the second one just sees
+ * nothing pending and returns null instead of racing the first to a batch run and a verdict write.
  */
 export async function evaluatePending(
   runBatch: RunBatch,
-  opts: { store?: GateStore; /** a batch already run under the parent: scored instead of rerunning it */ parentBoardIds?: string[] } = {},
+  opts: {
+    store?: GateStore;
+    /** a batch already run under the parent: scored instead of rerunning it */
+    parentBoardIds?: string[];
+    workerId?: string;
+  } = {},
 ): Promise<GateDecision | null> {
   const store = opts.store ?? defaultStore();
-  const pending = await store.harness.findOne({ verdict: "pending" }, { sort: { version: 1 } });
-  if (!pending) return null;
-  const candidate = strip(pending);
-  const parentDoc = candidate.parent === null ? null : await store.harness.findOne({ version: candidate.parent });
-  if (!parentDoc) throw new Error(`v${candidate.version} has no parent config`);
-  const parent = strip(parentDoc);
+  const workerId = opts.workerId ?? defaultWorkerId();
+  const claimed = await claimPending(store.harness, workerId);
+  if (!claimed) return null;
 
   const record = async (d: GateDecision) => {
-    await store.harness.updateOne(
-      { version: d.version },
+    const res = await store.harness.updateOne(
+      { version: d.version, claimed_by: workerId },
       {
         $set: {
           verdict: d.verdict,
@@ -141,35 +164,65 @@ export async function evaluatePending(
           gate_note: d.reasons.join("; "),
           decided_at: new Date().toISOString(),
         },
+        $unset: { claimed_by: "", claimed_at: "" },
       },
     );
+    if (res.matchedCount !== 1) throw new Error(`lost claim on v${d.version} while recording its verdict`);
     return d;
   };
 
-  const violations = guardrailViolations(parent, candidate);
-  if (violations.length)
-    return record({ version: candidate.version, parent: parent.version, verdict: "rejected", reasons: violations });
+  try {
+    const candidate = strip(claimed);
+    const parentDoc = candidate.parent === null ? null : await store.harness.findOne({ version: candidate.parent });
+    if (!parentDoc) throw new Error(`v${candidate.version} has no parent config`);
+    const parent = strip(parentDoc);
 
-  let parentScores = (parent.scores as Scores | undefined) ?? undefined;
-  if (!parentScores) {
-    const reused = opts.parentBoardIds?.length
-      ? await scoreVersion(parent.version, { boardIds: opts.parentBoardIds, store })
-      : null;
-    parentScores = reused ?? (await runAndScore(parent, runBatch, store));
-    await store.harness.updateOne({ version: parent.version }, { $set: { scores: stripBoards(parentScores) } });
+    // Two people proposing off the same current config at once can produce sibling pending versions with the same
+    // parent. If a sibling was already decided and is now current, this candidate's parent is stale: comparing it
+    // against that stale parent could let a worse, later-numbered config outrank the sibling that's actually current
+    // (currentConfig() just takes the newest "kept" version). Ask for a fresh proposal instead of spending a batch.
+    const head = await store.harness.findOne({ verdict: "kept" }, { sort: { version: -1 }, projection: { version: 1 } });
+    if (head && head.version !== parent.version) {
+      return await record({
+        version: candidate.version,
+        parent: parent.version,
+        verdict: "rolled_back",
+        reasons: [`stale: proposed from v${parent.version}, but v${head.version} is current now; re-propose from it`],
+      });
+    }
+
+    const violations = guardrailViolations(parent, candidate);
+    if (violations.length)
+      return await record({ version: candidate.version, parent: parent.version, verdict: "rejected", reasons: violations });
+
+    let parentScores = (parent.scores as Scores | undefined) ?? undefined;
+    if (!parentScores) {
+      const reused = opts.parentBoardIds?.length
+        ? await scoreVersion(parent.version, { boardIds: opts.parentBoardIds, store })
+        : null;
+      parentScores = reused ?? (await runAndScore(parent, runBatch, store));
+      await store.harness.updateOne({ version: parent.version }, { $set: { scores: stripBoards(parentScores) } });
+    }
+    const scores = await runAndScore(candidate, runBatch, store);
+    const better = isBetter(scores, parentScores);
+    const fmt = (s: HarnessScores) =>
+      `pass ${(s.checks_passed * 100).toFixed(0)}%, ${s.attempts_per_board.toFixed(1)} attempts, $${s.cost_per_board_usd.toFixed(4)}/board`;
+    return await record({
+      version: candidate.version,
+      parent: parent.version,
+      verdict: better ? "kept" : "rolled_back",
+      reasons: [`v${candidate.version} ${fmt(scores)} vs v${parent.version} ${fmt(parentScores)}`],
+      scores,
+      parentScores,
+    });
+  } catch (err) {
+    // Release the claim so a retry doesn't have to wait out CLAIM_STALE_MS; leave the version pending.
+    await store.harness.updateOne(
+      { version: claimed.version, claimed_by: workerId },
+      { $unset: { claimed_by: "", claimed_at: "" } },
+    );
+    throw err;
   }
-  const scores = await runAndScore(candidate, runBatch, store);
-  const better = isBetter(scores, parentScores);
-  const fmt = (s: HarnessScores) =>
-    `pass ${(s.checks_passed * 100).toFixed(0)}%, ${s.attempts_per_board.toFixed(1)} attempts, $${s.cost_per_board_usd.toFixed(4)}/board`;
-  return record({
-    version: candidate.version,
-    parent: parent.version,
-    verdict: better ? "kept" : "rolled_back",
-    reasons: [`v${candidate.version} ${fmt(scores)} vs v${parent.version} ${fmt(parentScores)}`],
-    scores,
-    parentScores,
-  });
 }
 
 const stripBoards = ({ checks_passed, attempts_per_board, cost_per_board_usd }: HarnessScores): HarnessScores => ({

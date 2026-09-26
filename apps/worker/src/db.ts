@@ -53,7 +53,13 @@ export type SpecRequest = {
 };
 
 /** A config version plus what the gate recorded when it decided. */
-export type StoredConfig = HarnessConfig & { gate_note?: string; decided_at?: string };
+export type StoredConfig = HarnessConfig & {
+  gate_note?: string;
+  decided_at?: string;
+  /** Set while a gate is evaluating this pending version, so two concurrent `evolve` runs don't score it twice. */
+  claimed_by?: string;
+  claimed_at?: string;
+};
 /** One row of `npm run ablation`'s table (DESIGN.md §7), so Jack can show it instead of fixture data. */
 export interface StoredAblationRow {
   setup: string;
