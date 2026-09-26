@@ -9,7 +9,10 @@
 import { MongoClient, type Collection } from "mongodb";
 
 export interface SpecRequestDoc {
-  spec_id: string;
+  /** A spec from the specs collection, or… */
+  spec_id?: string;
+  /** …free text (graded by generic checks built from the board, never by hidden checks). */
+  text?: string;
   status: "queued" | "running" | "done" | "failed";
   created_at: string;
   source: "web";

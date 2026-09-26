@@ -17,7 +17,8 @@ interface SpecDoc {
 
 interface RequestDoc {
   _id: string;
-  spec_id: string;
+  spec_id?: string;
+  text?: string;
   status: "queued" | "running" | "done" | "failed";
   created_at: string;
   board_id?: string;
@@ -154,7 +155,7 @@ export function SpecRunner() {
                 {r.status === "done" ? (r.passed ? "passed" : "not passed") : r.status}
               </span>
               <span className="min-w-0 flex-1 truncate text-dim">
-                {r.spec_id}
+                {r.spec_id ?? `"${(r.text ?? "").slice(0, 70)}"`}
                 {r.attempts !== undefined ? <span className="text-ghost"> · {r.attempts} attempt(s)</span> : null}
                 {r.error ? <span className="text-bad"> · {r.error}</span> : null}
               </span>

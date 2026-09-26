@@ -29,6 +29,10 @@ export interface RunBoardOptions {
   writeMemory?: boolean;
   /** Retrieve lessons and library subcircuits. Turn off for the ablation's v0 row ("loop + checks", no learned memory). Default true. */
   useMemory?: boolean;
+  /** Run this spec instead of looking `specId` up (free text from the web app). */
+  spec?: Spec;
+  /** For a spec with no hidden-check file: builds the checks from each attempt's Circuit JSON (Marcos's generic checks). */
+  expectedFor?: (circuitJson: unknown) => unknown;
 }
 
 export interface RunBoardResult {
@@ -65,9 +69,9 @@ function toBoardMetrics(m: CoderResult["metrics"]): BoardMetrics {
 
 export async function runBoard(specId: string, config: HarnessConfig, opts: RunBoardOptions = {}): Promise<RunBoardResult> {
   const { boardId = randomUUID(), writeMemory = true, useMemory = true } = opts;
-  const spec = findSpec(specId);
+  const spec = opts.spec ?? findSpec(specId);
   const checks = await loadChecks();
-  const expected = checks.loadExpected(specId);
+  const expected = opts.expectedFor ? undefined : checks.loadExpected(specId);
   const completeCritic = createComplete("critic", config);
 
   const [lessons, subcircuits] = useMemory
@@ -95,7 +99,7 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
         previousFailure: config.context.include_last_failure ? previousFailure : undefined,
       });
       source = coderResult.source;
-      const checked = await checks.runChecks(coderResult.circuitJson, expected, {
+      const checked = await checks.runChecks(coderResult.circuitJson, opts.expectedFor ? opts.expectedFor(coderResult.circuitJson) : expected, {
         board_id: boardId,
         harness_version: config.version,
       });

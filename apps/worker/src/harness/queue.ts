@@ -28,14 +28,38 @@ export function processAlive(pid: number | undefined): boolean {
   }
 }
 
+type Claim = { _id: string | object; claimed_host?: string; claimed_pid?: number; heartbeat?: string };
+
 /**
- * Whether a running claim is abandoned: claimed on this machine by a process that no longer exists (a restart resumes
- * at once), or claimed elsewhere with a heartbeat older than `staleMs`. A live process on this machine is never
- * robbed, even if two workers share a worker id.
+ * Whether a running claim is abandoned: claimed on this host by a process that no longer exists (a restart resumes at
+ * once), or claimed on another host with a heartbeat older than `staleMs`. The pid is only trusted on the host that
+ * wrote it, so a shared WORKER_ID across machines can't make a dead claim look alive (or a live one dead).
  */
-export function abandoned(item: { claimed_by?: string; claimed_pid?: number; heartbeat?: string }, workerId: string, staleMs: number) {
-  if (item.claimed_by === workerId) return item.claimed_pid !== process.pid && !processAlive(item.claimed_pid);
+export function abandoned(item: Omit<Claim, "_id">, staleMs: number) {
+  if (item.claimed_host === hostname()) return item.claimed_pid !== process.pid && !processAlive(item.claimed_pid);
   return !item.heartbeat || Date.parse(item.heartbeat) < Date.now() - staleMs;
+}
+
+/**
+ * Re-queues abandoned claims. Each write matches the exact claim that was judged (pid and heartbeat), so if its owner
+ * heartbeats or finishes between the read and the write, nothing is stolen.
+ */
+export async function releaseAbandoned(
+  collection: { bulkWrite(ops: object[]): Promise<{ modifiedCount: number }> },
+  claims: Claim[],
+  staleMs: number,
+  back: "pending" | "queued",
+) {
+  const ops = claims
+    .filter((c) => abandoned(c, staleMs))
+    .map((c) => ({
+      updateOne: {
+        filter: { _id: c._id, status: "running", claimed_pid: c.claimed_pid ?? null, heartbeat: c.heartbeat ?? null },
+        update: { $set: { status: back }, $unset: { claimed_by: "", claimed_pid: "", claimed_host: "" } },
+      },
+    }));
+  if (!ops.length) return 0;
+  return (await collection.bulkWrite(ops)).modifiedCount;
 }
 
 export const runId = (boardId: string, step: number, attempt: number) =>
@@ -90,16 +114,11 @@ export async function enqueue(boardId: string, items: NewItem[]) {
  * plus anyone's whose heartbeat is older than STALE_MS (that worker died).
  */
 export async function recover(workerId = defaultWorkerId(), boardId?: string) {
+  void workerId; // kept in the signature for callers; ownership is decided by host + pid (see abandoned)
   const running = await col.queue
-    .find({ status: "running", ...(boardId && { board_id: boardId }) }, { projection: { claimed_by: 1, claimed_pid: 1, heartbeat: 1 } })
+    .find({ status: "running", ...(boardId && { board_id: boardId }) }, { projection: { claimed_host: 1, claimed_pid: 1, heartbeat: 1 } })
     .toArray();
-  const ids = running.filter((i) => abandoned(i, workerId, STALE_MS)).map((i) => i._id);
-  if (!ids.length) return 0;
-  const res = await col.queue.updateMany(
-    { _id: { $in: ids }, status: "running" },
-    { $set: { status: "pending" }, $unset: { claimed_by: "", claimed_pid: "" } },
-  );
-  return res.modifiedCount;
+  return releaseAbandoned(col.queue as never, running, STALE_MS, "pending");
 }
 
 /** Atomically claims the next ready item (pending, no unfinished dependencies), lowest step first. */
@@ -107,7 +126,7 @@ export async function claimNext(workerId = defaultWorkerId(), boardId?: string):
   const t = now();
   return col.queue.findOneAndUpdate(
     { status: "pending", waiting_on: { $size: 0 }, ...(boardId && { board_id: boardId }) },
-    { $set: { status: "running", claimed_by: workerId, claimed_pid: process.pid, heartbeat: t, started_at: t }, $inc: { attempts: 1 } },
+    { $set: { status: "running", claimed_by: workerId, claimed_pid: process.pid, claimed_host: hostname(), heartbeat: t, started_at: t }, $inc: { attempts: 1 } },
     { sort: { step: 1 }, returnDocument: "after" },
   );
 }
@@ -137,7 +156,7 @@ export async function complete(
     await session.withTransaction(async () => {
       const done = await col.queue.updateOne(
         { _id: item._id, status: "running", claimed_by: workerId, claimed_pid: process.pid },
-        { $set: { status: "done", finished_at: now() }, $unset: { claimed_by: "", claimed_pid: "", error: "" } },
+        { $set: { status: "done", finished_at: now() }, $unset: { claimed_by: "", claimed_pid: "", claimed_host: "", error: "" } },
         { session },
       );
       if (done.matchedCount !== 1) throw new LostClaim(`lost claim on ${item._id}`);
@@ -163,7 +182,7 @@ export async function fail(item: StoredWorkItem, error: string, run?: RunResult,
       const retry = item.attempts < item.max_attempts;
       const res = await col.queue.updateOne(
         { _id: item._id, status: "running", claimed_by: workerId, claimed_pid: process.pid },
-        { $set: { status: retry ? "pending" : "failed", error, finished_at: now() }, $unset: { claimed_by: "", claimed_pid: "" } },
+        { $set: { status: retry ? "pending" : "failed", error, finished_at: now() }, $unset: { claimed_by: "", claimed_pid: "", claimed_host: "" } },
         { session },
       );
       if (res.matchedCount !== 1) throw new LostClaim(`lost claim on ${item._id}`);
