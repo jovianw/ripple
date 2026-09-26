@@ -13,7 +13,7 @@ const AGENT_LABEL: Record<AgentName, string> = {
 const MARK: Record<SnapshotStatus, { glyph: string; ink: string }> = {
   working: { glyph: "→", ink: "text-accent" },
   success: { glyph: "✓", ink: "text-good" },
-  warning: { glyph: "⚠", ink: "text-warn" },
+  warning: { glyph: "↻", ink: "text-warn" },
   error: { glyph: "⚠", ink: "text-bad" },
 };
 
@@ -22,34 +22,51 @@ export function ActivityItem({
   message,
   status,
   active,
+  /** Distance back from the newest event, used to fade older history. */
+  age,
+  /** Repeated agent headers are dropped so runs of one agent read as a block. */
+  showAgent,
 }: {
   agent: AgentName;
   message: string;
   status: SnapshotStatus;
   active: boolean;
+  age: number;
+  showAgent: boolean;
 }) {
   const mark = MARK[status];
+  // Recent history stays legible; older entries recede rather than disappear.
+  const dim = active ? "" : age <= 2 ? "opacity-80" : age <= 4 ? "opacity-55" : "opacity-35";
 
   return (
     <li
-      className={`rise border-l-2 py-2 pl-3 pr-2 ${
-        active ? "border-accent bg-white/[0.03]" : "border-transparent"
+      className={`rise border-l-2 pr-3 ${dim} ${
+        active
+          ? "border-l-accent bg-white/[0.04] py-2.5 pl-3"
+          : "border-l-transparent py-1 pl-3"
       }`}
     >
-      <div
-        className={`font-mono text-[10px] uppercase tracking-wider ${
-          active ? "text-dim" : "text-faint"
-        }`}
-      >
-        {AGENT_LABEL[agent]}
-      </div>
-      <div className="mt-0.5 flex gap-2">
-        <span className={`${mark.ink} ${active ? "" : "opacity-60"}`} aria-hidden>
+      {showAgent ? (
+        <div
+          className={`font-mono text-[9px] uppercase tracking-[0.18em] ${
+            active ? "text-dim" : "text-faint"
+          } ${active ? "mb-1" : "mb-0.5"}`}
+        >
+          {AGENT_LABEL[agent]}
+        </div>
+      ) : null}
+
+      <div className="flex gap-2">
+        <span className={`shrink-0 ${mark.ink}`} aria-hidden>
           {mark.glyph}
         </span>
         <span
-          className={`text-[13px] leading-snug ${
-            active ? "text-ink" : "text-dim"
+          className={`leading-snug ${
+            active
+              ? "text-[13px] text-ink"
+              : status === "error"
+                ? "text-[12px] text-bad"
+                : "text-[12px] text-dim"
           }`}
         >
           {message}
