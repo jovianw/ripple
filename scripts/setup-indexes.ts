@@ -18,6 +18,7 @@ await col.boards.createIndex({ board_id: 1, version: -1 });
 await col.queue.createIndex({ status: 1, board_id: 1 });
 await col.runs.createIndex({ board_id: 1, ts: -1 });
 await col.runs.createIndex({ harness_version: 1, passed: 1 }); // feeds the ablation table
+await col.requests.createIndex({ status: 1, created_at: 1 }); // the worker claims the oldest queued request
 console.log("regular indexes: ok");
 
 const vectorIndexes = [

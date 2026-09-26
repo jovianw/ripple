@@ -63,6 +63,7 @@ Check tscircuit works: `npm run smoke` renders `examples/led-board.tsx` through 
 | `npm run green` | Checks Atlas writer, read-only reader, Voyage, OpenRouter + LangSmith |
 | `npm run setup:indexes` / `npm run seed:config` | Atlas collections and indexes / harness config v0 (both done; safe to re-run) |
 | `npm run queue:demo` | Work-queue kill-and-resume demo (Ctrl+C mid-run, rerun, it resumes) |
+| `npm run worker` | Serves spec requests from the web app (`spec_requests` change stream); restart resumes interrupted requests |
 | `npm run evolve` | Recursive-harnessing loop: batch → meta-agent proposal → config gate verdict (`-- --rounds N`, `-- --specs a,b`; spends model budget) |
 
 ## Specs and parts

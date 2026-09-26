@@ -29,6 +29,27 @@ export type StoredRun = RunResult & {
   lessons_used?: string[];
   subcircuits_used?: string[];
 };
+/**
+ * A spec submitted from the web app (inserted by the `ripple_requester` user, which can do nothing else).
+ * The worker (`npm run worker`) claims it and writes everything else.
+ */
+export type SpecRequest = {
+  _id?: import("mongodb").ObjectId;
+  spec_id?: string; // a spec from specs/specs.json or "finale"
+  text?: string; // free text (needs Arjun's ad-hoc runBoard)
+  status: "queued" | "running" | "done" | "failed";
+  created_at: Date | string;
+  claimed_by?: string;
+  started_at?: string;
+  heartbeat?: string;
+  finished_at?: string;
+  board_id?: string; // runs/boards for this request use this board_id
+  harness_version?: number;
+  passed?: boolean;
+  attempts?: number;
+  error?: string;
+};
+
 /** A config version plus what the gate recorded when it decided. */
 export type StoredConfig = HarnessConfig & { gate_note?: string; decided_at?: string };
 /** One row of `npm run ablation`'s table (DESIGN.md §7), so Jack can show it instead of fixture data. */
@@ -54,6 +75,7 @@ export const COLLECTIONS = [
   "runs",
   "lessons",
   "ablations",
+  "spec_requests",
 ] as const;
 
 export const client = new MongoClient(uri, { appName: "ripple-worker" });
@@ -68,6 +90,7 @@ export const col = {
   runs: db.collection<StoredRun>("runs"),
   lessons: db.collection<StoredLesson>("lessons"),
   ablations: db.collection<StoredAblationRow>("ablations"),
+  requests: db.collection<SpecRequest>("spec_requests"),
 };
 
 export async function connect() {

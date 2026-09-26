@@ -302,11 +302,11 @@ app reads Atlas at `/live`. It still can't submit a spec (read-only), and Vercel
 
 **Jovian**
 1. Vercel env vars `MONGODB_URI_READER`, `MONGODB_DB`, then redeploy (Jovian only).
-2. Spec requests: `spec_requests` collection + `npm run worker`, which watches it with a change stream, claims requests
+2. [done: `npm run worker`, kill-and-resume verified; Atlas `ripple_requester` user still to create] Spec requests: `spec_requests` collection + `npm run worker`, which watches it with a change stream, claims requests
    atomically, and runs `runBoard` (or the finale pipeline for `finale`), writing `status` and `board_id` back. Resumes
    unfinished requests on restart. Contract documented in `docs/frontend-backend.md`. Atlas: a `ripple_requester` user
    with a custom role limited to insert/find on `ripple.spec_requests`.
-3. Lesson dedupe in `addLesson`: a lesson that nearly matches an existing one updates it instead of adding another.
+3. [done: threshold 0.965, verified on live lessons] Lesson dedupe in `addLesson`: a lesson that nearly matches an existing one updates it instead of adding another.
 4. When Arjun's item 1 lands: `npm run evolve -- --rounds 2` on all training specs, aiming for a kept version with a new rule.
 
 **Arjun**
