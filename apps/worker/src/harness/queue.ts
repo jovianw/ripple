@@ -31,13 +31,25 @@ export function processAlive(pid: number | undefined): boolean {
 type Claim = { _id: string | object; claimed_host?: string; claimed_pid?: number; heartbeat?: string };
 
 /**
+ * A live pid on this host whose claim hasn't heartbeat in this long is a reused pid (the claimer died, e.g. across a
+ * reboot, and an unrelated process got its number). Far above any event-loop stall (a long autoroute), which is why the
+ * same-host check trusts the pid over `staleMs` in the first place.
+ */
+const REUSED_PID_MS = 10 * 60_000;
+
+/**
  * Whether a running claim is abandoned: claimed on this host by a process that no longer exists (a restart resumes at
- * once), or claimed on another host with a heartbeat older than `staleMs`. The pid is only trusted on the host that
- * wrote it, so a shared WORKER_ID across machines can't make a dead claim look alive (or a live one dead).
+ * once) or whose pid was reused (heartbeat older than REUSED_PID_MS), or claimed on another host with a heartbeat older
+ * than `staleMs`. The pid is only trusted on the host that wrote it, so a shared WORKER_ID across machines can't make a
+ * dead claim look alive (or a live one dead).
  */
 export function abandoned(item: Omit<Claim, "_id">, staleMs: number) {
-  if (item.claimed_host === hostname()) return item.claimed_pid !== process.pid && !processAlive(item.claimed_pid);
-  return !item.heartbeat || Date.parse(item.heartbeat) < Date.now() - staleMs;
+  const staleFor = (ms: number) => !item.heartbeat || Date.parse(item.heartbeat) < Date.now() - ms;
+  if (item.claimed_host === hostname()) {
+    if (item.claimed_pid === process.pid) return false;
+    return !processAlive(item.claimed_pid) || staleFor(REUSED_PID_MS);
+  }
+  return staleFor(staleMs);
 }
 
 /**
