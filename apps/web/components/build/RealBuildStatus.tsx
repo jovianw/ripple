@@ -23,6 +23,7 @@ export function RealBuildStatus({
   note,
   onBoard,
   onStatus,
+  onFailed,
 }: {
   requestId: string | null;
   note: string | null;
@@ -30,6 +31,8 @@ export function RealBuildStatus({
   onBoard?: (boardId: string) => void;
   /** Fired on each poll so the main view can show what the worker is doing. */
   onStatus?: (status: "queued" | "running") => void;
+  /** Fired once, when the request ends without a board to show. */
+  onFailed?: (error: string) => void;
 }) {
   const [req, setReq] = useState<RequestState | null>(null);
 
@@ -41,10 +44,12 @@ export function RealBuildStatus({
   // finished build ended up never reaching the scene.
   const onBoardRef = useRef(onBoard);
   const onStatusRef = useRef(onStatus);
+  const onFailedRef = useRef(onFailed);
   useEffect(() => {
     onBoardRef.current = onBoard;
     onStatusRef.current = onStatus;
-  }, [onBoard, onStatus]);
+    onFailedRef.current = onFailed;
+  }, [onBoard, onStatus, onFailed]);
 
   useEffect(() => {
     if (!requestId) return;
@@ -60,6 +65,12 @@ export function RealBuildStatus({
         stopped = true;
         if (json.status === "done" && json.board_id)
           onBoardRef.current?.(json.board_id);
+        else
+          onFailedRef.current?.(
+            json.status === "failed"
+              ? (json.error ?? "the worker could not build this board")
+              : "the worker finished without producing a board",
+          );
       }
     };
     const first = setTimeout(poll, 0);

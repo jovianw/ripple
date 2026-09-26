@@ -219,7 +219,12 @@ export function RippleDashboard() {
       const payload = await getJson<RealBoardPayload & { error?: string }>(
         `/api/boards/${encodeURIComponent(boardId)}`,
       );
-      if (!payload || payload.error || !payload.pcb?.components?.length) return;
+      if (!payload || payload.error || !payload.pcb?.components?.length) {
+        setAwaiting(null);
+        setStartedAt(null);
+        setBuildError(payload?.error ?? "the finished board could not be loaded");
+        return;
+      }
 
       const runs =
         (await getJson<{ runs?: RunDoc[] }>(
@@ -519,6 +524,7 @@ export function RippleDashboard() {
               onBuild={build}
               onReset={reset}
               isRunning={isRunning}
+              building={awaiting !== null || isRunning}
               hasRun={revealed > 0}
             />
             <RealBuildStatus
@@ -528,6 +534,11 @@ export function RippleDashboard() {
               onStatus={(st) =>
                 setAwaiting((prev) => (prev === null ? null : st))
               }
+              onFailed={(error) => {
+                setAwaiting(null);
+                setStartedAt(null);
+                setBuildError(error);
+              }}
             />
           </div>
 
