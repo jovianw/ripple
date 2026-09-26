@@ -1,7 +1,22 @@
 // Atlas connection for the worker (writer user). Owner: Jovian.
 // The worker is the only process that writes design state.
 import { MongoClient } from "mongodb";
-import type { HarnessConfig, Lesson, RunResult, Subcircuit } from "@ripple/types";
+import type { HarnessConfig, Lesson, RunResult, Subcircuit, WorkItem } from "@ripple/types";
+
+/** A work-queue step. `waiting_on` shrinks as dependencies finish; an item is ready when it's empty. */
+export type StoredWorkItem = WorkItem & {
+  key: string; // unique within the board, e.g. "usb-power"
+  step: number; // order to prefer among ready items
+  title: string;
+  payload?: Record<string, unknown>; // whatever the handler needs (subcircuit spec text, etc.)
+  waiting_on: string[];
+  attempts: number;
+  max_attempts: number;
+  claimed_by?: string;
+  started_at?: string;
+  finished_at?: string;
+  error?: string;
+};
 
 // Memory documents carry a few fields beyond the shared draft shapes.
 export type StoredLesson = Lesson & { active: boolean; created_at: Date };
@@ -29,7 +44,7 @@ export const col = {
   specs: db.collection("specs"),
   subcircuits: db.collection<StoredSubcircuit>("subcircuits"),
   boards: db.collection("boards"),
-  queue: db.collection("work_queue"),
+  queue: db.collection<StoredWorkItem>("work_queue"),
   runs: db.collection<StoredRun>("runs"),
   lessons: db.collection<StoredLesson>("lessons"),
 };

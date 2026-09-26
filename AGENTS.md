@@ -20,6 +20,8 @@ Stay inside your person's area. To change another area, ask its owner.
 
 Per-person task list and timings: DESIGN.md §6.
 
+**Atlas, harness config, memory, work queue:** use the APIs in [apps/worker/src/harness/README.md](apps/worker/src/harness/README.md) (`currentConfig`, `propose`, `retrieveLessons`, `addLesson`, `retrieveSubcircuits`, `enqueue`, `runQueue`, ...). Read it before touching Atlas from worker code; don't query or write the collections directly when a function exists.
+
 ## Rules
 
 - **Contracts are frozen.** `HarnessConfig` and `RunResult` in `packages/types` change only with team agreement.
@@ -49,6 +51,9 @@ Check tscircuit works: `npm run smoke` renders `examples/led-board.tsx` through 
 | `npm run smoke t03` | Reference USB-C → 3.3V board (hidden) through autorouter + DRC |
 | `npm run verify:parts` | Renders every whitelisted part |
 | `npm run test:checks` | Hidden checker tests (good boards pass, broken boards fail) |
+| `npm run green` | Checks Atlas writer, read-only reader, Voyage, OpenRouter + LangSmith |
+| `npm run setup:indexes` / `npm run seed:config` | Atlas collections and indexes / harness config v0 (both done; safe to re-run) |
+| `npm run queue:demo` | Work-queue kill-and-resume demo (Ctrl+C mid-run, rerun, it resumes) |
 
 ## Specs and parts
 
