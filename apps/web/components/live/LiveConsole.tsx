@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
+
+import { getJson, usePolling } from "@/lib/usePolling";
 
 import {
   ago,
@@ -53,61 +55,52 @@ function Section({
   );
 }
 
-export function LiveConsole() {
-  const [health, setHealth] = useState<Health | null>(null);
-  const [runs, setRuns] = useState<RunDoc[]>([]);
-  const [versions, setVersions] = useState<HarnessDoc[]>([]);
-  const [lessons, setLessons] = useState<LessonDoc[]>([]);
-  const [subcircuits, setSubcircuits] = useState<SubcircuitDoc[]>([]);
-  const [queue, setQueue] = useState<QueueItemDoc[]>([]);
-  const [boards, setBoards] = useState<BoardSummary[]>([]);
-  const [paused, setPaused] = useState(false);
-  const pausedRef = useRef(false);
+interface LiveSnapshot {
+  health: Health | null;
+  runs: RunDoc[];
+  versions: HarnessDoc[];
+  lessons: LessonDoc[];
+  subcircuits: SubcircuitDoc[];
+  queue: QueueItemDoc[];
+  boards: BoardSummary[];
+}
 
-  const load = useCallback(async () => {
-    if (pausedRef.current) return;
-    const json = async (url: string) => {
-      const r = await fetch(url, { cache: "no-store" });
-      return r.json().catch(() => null);
-    };
-
-    const [h, r, v, m, q, b] = await Promise.all([
-      json("/api/health"),
-      json("/api/runs?limit=40"),
-      json("/api/harness"),
-      json("/api/memory"),
-      json("/api/queue"),
-      json("/api/boards"),
-    ]);
-
-    if (h) setHealth(h);
-    if (r?.runs) setRuns(r.runs);
-    if (v?.versions) setVersions(v.versions);
-    if (m?.lessons) setLessons(m.lessons);
-    if (m?.subcircuits) setSubcircuits(m.subcircuits);
-    if (q?.items) setQueue(q.items);
-    if (b?.boards) setBoards(b.boards);
-  }, []);
-
-  // Poll rather than stream: serverless functions can't hold a change stream
-  // open (docs/frontend-backend.md §3). Kicked off from a timer so no state is
-  // set synchronously inside the effect.
-  useEffect(() => {
-    const first = setTimeout(load, 0);
-    const timer = setInterval(load, POLL_MS);
-    return () => {
-      clearTimeout(first);
-      clearInterval(timer);
-    };
-  }, [load]);
-
-  const togglePause = () => {
-    pausedRef.current = !pausedRef.current;
-    setPaused(pausedRef.current);
+async function loadLive(): Promise<LiveSnapshot> {
+  const [h, r, v, m, q, b] = await Promise.all([
+    getJson<Health>("/api/health"),
+    getJson<{ runs?: RunDoc[] }>("/api/runs?limit=40"),
+    getJson<{ versions?: HarnessDoc[] }>("/api/harness"),
+    getJson<{ lessons?: LessonDoc[]; subcircuits?: SubcircuitDoc[] }>("/api/memory"),
+    getJson<{ items?: QueueItemDoc[] }>("/api/queue"),
+    getJson<{ boards?: BoardSummary[] }>("/api/boards"),
+  ]);
+  return {
+    health: h,
+    runs: r?.runs ?? [],
+    versions: v?.versions ?? [],
+    lessons: m?.lessons ?? [],
+    subcircuits: m?.subcircuits ?? [],
+    queue: q?.items ?? [],
+    boards: b?.boards ?? [],
   };
+}
+
+export function LiveConsole() {
+  const { data, paused, togglePause } = usePolling(loadLive, POLL_MS);
+
+  const health = data?.health ?? null;
+  const runs = data?.runs ?? [];
+  const versions = useMemo(() => data?.versions ?? [], [data]);
+  const lessons = data?.lessons ?? [];
+  const subcircuits = data?.subcircuits ?? [];
+  const queue = data?.queue ?? [];
+  const boards = data?.boards ?? [];
 
   const connected = health?.connected === true;
-  const byVersion = new Map(versions.map((v) => [v.version, v]));
+  const byVersion = useMemo(
+    () => new Map(versions.map((v) => [v.version, v])),
+    [versions],
+  );
 
   return (
     <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-6">
@@ -116,7 +109,15 @@ export function LiveConsole() {
           <Link href="/" className="text-[15px] font-medium tracking-[0.08em] text-ink hover:text-accent">
             Ripple
           </Link>
-          <span className="text-[12px] text-ghost">live · Atlas</span>
+          <nav className="flex items-baseline gap-3 text-[12px]">
+            <Link href="/" className="text-faint hover:text-ink">
+              Board
+            </Link>
+            <span className="text-ink">Live</span>
+            <Link href="/harness" className="text-faint hover:text-ink">
+              Harness
+            </Link>
+          </nav>
         </div>
         <div className="flex items-center gap-5 text-[12px]">
           <button type="button" onClick={togglePause} className="text-faint hover:text-ink">

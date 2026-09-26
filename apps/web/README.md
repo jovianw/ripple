@@ -145,3 +145,27 @@ Two things the adapter gets right that are easy to get wrong:
 `pcb_board.center` is generally **not** the origin, so all geometry is
 translated by it; and `pcb_component.width/height` is the bounding box **after**
 rotation, so applying the rotation again double-rotates the part.
+
+### /harness — runtime observability
+
+What the harness is doing right now, from the records the worker already
+writes. `lib/harness-observability.ts` is the only place raw documents are
+interpreted; components take `HarnessObservation[]`.
+
+The worker does not store an `agent`, a tool-call log, a planner event, or a
+latency. So the page:
+
+- derives the actor from `stage` via one `STAGE_ACTOR_MAP`, and labels it
+  "derived from stage" in the inspector;
+- shows Planner as **no telemetry** rather than idle — idle would imply we
+  would know if it were working;
+- labels model/token/cost on a `checks` record as the **producer model**, since
+  the checker is deterministic and that usage came from the coder call that
+  made the board;
+- prints "Not recorded" where a field is absent instead of inventing one;
+- draws no edges in the topology, because none are logged.
+
+`actorConfidence` is `"explicit" | "derived"`, and an `agent` field on a run is
+preferred automatically the moment the worker starts writing one.
+
+Polling is shared with `/live` through `lib/usePolling.ts`.
