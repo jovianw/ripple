@@ -10,18 +10,7 @@ const STATUS_TEXT: Record<string, { label: string; ink: string }> = {
   normal: { label: "Healthy", ink: "text-good" },
 };
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <dt className="font-mono text-[9px] uppercase tracking-[0.16em] text-faint">
-        {label}
-      </dt>
-      <dd className="mt-0.5 text-[12px] text-ink">{children}</dd>
-    </div>
-  );
-}
-
-/** Compact overlay pinned to the canvas, not a permanent sidebar. */
+/** Floats in the world's lower corner; spacing separates it, not a border. */
 export function ComponentInspector({
   component,
   onClose,
@@ -32,40 +21,35 @@ export function ComponentInspector({
   const status = STATUS_TEXT[component.status ?? "normal"];
 
   return (
-    <div className="w-[14.5rem] rounded-sm border border-line bg-panel/90 px-3 py-2.5 backdrop-blur-sm">
-      <div className="flex items-start justify-between gap-2">
-        <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-faint">
-          Inspector
+    <div className="max-w-[17rem]">
+      <div className="flex items-baseline gap-3">
+        <span className="font-mono text-[15px] text-ink">{component.label}</span>
+        <span className="text-[13px] text-dim">
+          {component.part ?? component.type}
         </span>
         <button
           type="button"
           onClick={onClose}
-          className="-mr-1 -mt-0.5 px-1 text-faint hover:text-ink"
+          className="ml-auto text-[12px] text-ghost hover:text-ink"
           aria-label="Close inspector"
         >
           ✕
         </button>
       </div>
 
-      <dl className="mt-2 space-y-2">
-        <Row label="Reference">
-          <span className="font-mono">{component.label}</span>
-        </Row>
-        <Row label="Component">{component.part ?? component.type}</Row>
-        <Row label="Status">
-          <span className={status.ink}>{status.label}</span>
-        </Row>
+      <div className="mt-1.5 flex items-baseline gap-2 text-[12px]">
+        <span className={status.ink}>{status.label}</span>
         {component.placedDuring ? (
-          <Row label="Placed during">
-            <span className="capitalize text-dim">{component.placedDuring}</span>
-          </Row>
+          <>
+            <span className="text-ghost">·</span>
+            <span className="text-faint">placed in {component.placedDuring}</span>
+          </>
         ) : null}
-        {component.note ? (
-          <Row label="Current issue">
-            <span className="text-bad">{component.note}</span>
-          </Row>
-        ) : null}
-      </dl>
+      </div>
+
+      {component.note ? (
+        <p className="mt-1.5 text-[12px] leading-snug text-bad">{component.note}</p>
+      ) : null}
     </div>
   );
 }

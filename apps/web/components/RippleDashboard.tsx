@@ -2,14 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { AgentActivity } from "@/components/activity/AgentActivity";
-import { BuildTimeline } from "@/components/build/BuildTimeline";
-import { MetricsStrip } from "@/components/build/MetricsStrip";
-import { PromptBar } from "@/components/build/PromptBar";
-import { StageProgress } from "@/components/build/StageProgress";
+import { ExecutionTrace } from "@/components/activity/ExecutionTrace";
+import { HistoryGraph } from "@/components/build/HistoryGraph";
+import { SpecificationBar } from "@/components/build/SpecificationBar";
+import { StageRibbon } from "@/components/build/StageRibbon";
+import { Telemetry } from "@/components/build/Telemetry";
 import { ComponentInspector } from "@/components/pcb/ComponentInspector";
-import { OperationOverlay } from "@/components/pcb/OperationOverlay";
 import { PCBViewport } from "@/components/pcb/PCBViewport";
+import type { RippleEvent } from "@/components/pcb/RippleField";
+import { WorldHud } from "@/components/pcb/WorldHud";
 import { DEFAULT_PROMPT, DEMO_SNAPSHOTS } from "@/lib/demoSnapshots";
 import { deriveMetrics } from "@/lib/metrics";
 import { diffPCBStates } from "@/lib/pcbDiff";
@@ -20,35 +21,26 @@ import { EMPTY_PCB, type PCBComponent } from "@/lib/types";
 // knows the difference — it all takes BuildSnapshot props.
 const SNAPSHOTS = DEMO_SNAPSHOTS;
 
-function StatusChip({
-  running,
-  failing,
-  repairing,
-  complete,
-}: {
+/** One canonical status for the whole system; details live elsewhere. */
+function systemStatus(args: {
+  started: boolean;
   running: boolean;
   failing: boolean;
   repairing: boolean;
   complete: boolean;
-}) {
-  const [dot, label, ink] = failing
-    ? ["bg-bad", "Check failed", "text-bad"]
-    : repairing
-      ? ["bg-warn pulse-dot", "Repairing", "text-warn"]
-      : complete
-        ? ["bg-good", "Checks passed", "text-good"]
-        : running
-          ? ["bg-accent pulse-dot", "Building", "text-accent"]
-          : ["bg-white/25", "Idle", "text-faint"];
-
-  return (
-    <span className="flex items-center gap-2">
-      <span className={`h-[7px] w-[7px] rounded-full ${dot}`} aria-hidden />
-      <span className={`font-mono text-[10px] uppercase tracking-[0.18em] ${ink}`}>
-        {label}
-      </span>
-    </span>
-  );
+  checking: boolean;
+}): { label: string; ink: string; dot: string; pulse: boolean } {
+  if (args.failing)
+    return { label: "Failed", ink: "text-bad", dot: "bg-bad", pulse: false };
+  if (args.repairing)
+    return { label: "Repairing", ink: "text-warn", dot: "bg-warn", pulse: true };
+  if (args.complete)
+    return { label: "Passed", ink: "text-good", dot: "bg-good", pulse: false };
+  if (args.checking)
+    return { label: "Checking", ink: "text-accent", dot: "bg-accent", pulse: true };
+  if (args.running)
+    return { label: "Building", ink: "text-accent", dot: "bg-accent", pulse: true };
+  return { label: "Idle", ink: "text-faint", dot: "bg-ghost", pulse: false };
 }
 
 export function RippleDashboard() {
@@ -130,16 +122,45 @@ export function RippleDashboard() {
   const current = currentIndex >= 0 ? SNAPSHOTS[currentIndex] : null;
   const pcb = current?.pcb ?? EMPTY_PCB;
 
-  // What changed since the previous snapshot. Added parts animate in by virtue
-  // of mounting; *changed* parts keep the same mesh, so the diff is what tells
-  // the scene to re-highlight them.
-  const changedIds = useMemo(() => {
+  const diff = useMemo(() => {
     const previous =
       currentIndex > 0 ? SNAPSHOTS[currentIndex - 1].pcb : EMPTY_PCB;
-    return new Set(
-      diffPCBStates(previous, pcb).changedComponents.map((c) => c.id),
-    );
+    return diffPCBStates(previous, pcb);
   }, [currentIndex, pcb]);
+
+  // Added parts animate by mounting; *changed* parts keep the same mesh, so the
+  // diff is what tells the scene to re-highlight them.
+  const changedIds = useMemo(
+    () => new Set(diff.changedComponents.map((c) => c.id)),
+    [diff],
+  );
+
+  // Change propagation: one ring per meaningful edit, keyed by snapshot so the
+  // scene admits each exactly once.
+  const ripples = useMemo<RippleEvent[]>(() => {
+    if (!current) return [];
+    const version = current.version;
+    const out: RippleEvent[] = [];
+
+    for (const c of diff.addedComponents) {
+      out.push({
+        id: `${version}:add:${c.id}`,
+        x: c.position.x,
+        y: c.position.y,
+        tone: c.placedDuring === "repair" ? "repair" : "place",
+      });
+    }
+    for (const c of diff.changedComponents) {
+      if (c.status !== "error" && c.status !== "repairing") continue;
+      out.push({
+        id: `${version}:${c.status}:${c.id}`,
+        x: c.position.x,
+        y: c.position.y,
+        tone: c.status === "error" ? "error" : "repair",
+      });
+    }
+    return out;
+  }, [current, diff]);
 
   const history = useMemo(
     () => SNAPSHOTS.slice(0, isLive ? revealed : currentIndex + 1),
@@ -153,13 +174,11 @@ export function RippleDashboard() {
 
   const metrics = useMemo(() => deriveMetrics(pcb, current), [pcb, current]);
 
-  // The part under investigation drives both the camera nudge and the chip.
   const faultId =
     pcb.components.find(
       (c) => c.status === "error" || c.status === "repairing",
     )?.id ?? null;
 
-  // Keep the inspector in sync when a snapshot changes a part's status.
   const selectedLive = selected
     ? (pcb.components.find((c) => c.id === selected.id) ?? null)
     : null;
@@ -170,79 +189,111 @@ export function RippleDashboard() {
   const checkFailed = history.some((s) => s.status === "error");
   const progress = revealed === 0 ? 0 : (currentIndex + 1) / SNAPSHOTS.length;
 
+  const status = systemStatus({
+    started: revealed > 0,
+    running: isRunning,
+    failing,
+    repairing,
+    complete,
+    checking: current?.stage === "checking" && !failing,
+  });
+
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
-      <header className="flex h-11 shrink-0 items-center justify-between border-b border-line bg-panel px-4">
-        <div className="flex items-baseline gap-3">
-          <span className="text-[14px] font-semibold tracking-[0.22em]">
-            RIPPLE
+    <div className="flex h-screen flex-col overflow-hidden bg-void">
+      {/* Product status bar. Two facts on the left, two on the right. */}
+      <header className="flex h-12 shrink-0 items-center justify-between px-6">
+        <div className="flex items-baseline gap-2.5">
+          <span className="text-[15px] font-medium tracking-[0.08em] text-ink">
+            Ripple
           </span>
-          <span className="hidden font-mono text-[10px] text-faint sm:inline">
-            agentic PCB design
-          </span>
+          <span className="text-[12px] text-ghost">PCB synthesis</span>
         </div>
         <div className="flex items-center gap-5">
-          <span className="font-mono text-[10px] text-faint">Harness v1</span>
-          <StatusChip
-            running={isRunning}
-            failing={failing}
-            repairing={repairing}
-            complete={complete}
-          />
+          <span className="text-[12px] text-faint">
+            Harness <span className="font-mono text-dim">01</span>
+          </span>
+          <span className="flex items-center gap-2">
+            <span
+              className={`h-[6px] w-[6px] rounded-full ${status.dot} ${
+                status.pulse ? "breathe" : ""
+              }`}
+              aria-hidden
+            />
+            <span className={`text-[12px] ${status.ink}`}>{status.label}</span>
+          </span>
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-rows-[1fr_auto] lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-1">
-        <section className="flex min-h-0 flex-col">
-          <div className="shrink-0 border-b border-line bg-panel">
-            <MetricsStrip metrics={metrics} />
+      <div className="grid min-h-0 flex-1 grid-rows-[1fr_auto] lg:grid-cols-[minmax(0,1fr)_310px] lg:grid-rows-1">
+        {/* The world. Instrumentation floats over it rather than beside it. */}
+        <section className="relative min-h-[260px]">
+          <div className="absolute inset-0">
+            <PCBViewport
+              pcb={pcb}
+              isRunning={isRunning}
+              selectedId={selectedLive?.id ?? null}
+              changedIds={changedIds}
+              snapshotVersion={current?.version ?? -1}
+              focusId={faultId}
+              ripples={ripples}
+              complete={complete}
+              onSelect={setSelected}
+            />
           </div>
 
-          <div className="tech-grid relative min-h-[260px] flex-1">
-            <div className="absolute inset-0">
-              <PCBViewport
-                pcb={pcb}
-                isRunning={isRunning}
-                selectedId={selectedLive?.id ?? null}
-                changedIds={changedIds}
-                snapshotVersion={current?.version ?? -1}
-                focusId={faultId}
-                onSelect={setSelected}
+          {current ? (
+            <div className="pointer-events-none absolute left-6 top-5">
+              <WorldHud
+                snapshot={current}
+                progress={progress}
+                totalSteps={SNAPSHOTS.length}
               />
             </div>
+          ) : (
+            <div className="pointer-events-none absolute left-6 top-5 max-w-[20rem]">
+              <div className="text-[20px] font-medium leading-tight text-dim">
+                Idle
+              </div>
+              <div className="mt-1.5 text-[12px] text-ghost">
+                Describe a board to begin synthesis.
+              </div>
+            </div>
+          )}
 
-            {current ? (
-              <div className="pointer-events-none absolute left-3 top-3">
-                <OperationOverlay snapshot={current} progress={progress} />
+          {!isLive ? (
+            <div className="pointer-events-none absolute right-6 top-5 text-right">
+              <div className="text-[12px] text-warn">Viewing history</div>
+              <div className="font-mono text-[11px] text-faint">
+                {currentIndex + 1} / {revealed}
               </div>
-            ) : (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <p className="rounded-sm border border-line bg-panel/80 px-4 py-2 text-xs text-dim backdrop-blur-sm">
-                  Describe a board and press Build
-                </p>
-              </div>
-            )}
+            </div>
+          ) : null}
 
-            {!isLive ? (
-              <div className="pointer-events-none absolute right-3 top-3 rounded-sm border border-warn/40 bg-warn/10 px-2.5 py-1 backdrop-blur-sm">
-                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-warn">
-                  History · snapshot {currentIndex + 1}/{revealed}
-                </span>
-              </div>
-            ) : null}
+          {selectedLive ? (
+            <div className="absolute bottom-5 left-6">
+              <ComponentInspector
+                component={selectedLive}
+                onClose={() => setSelected(null)}
+              />
+            </div>
+          ) : null}
 
-            {selectedLive ? (
-              <div className="absolute bottom-3 left-3">
-                <ComponentInspector
-                  component={selectedLive}
-                  onClose={() => setSelected(null)}
-                />
-              </div>
-            ) : null}
+          <div className="pointer-events-none absolute bottom-5 right-6">
+            <Telemetry metrics={metrics} />
           </div>
+        </section>
 
-          <div className="shrink-0 border-t border-line bg-panel">
-            <PromptBar
+        {/* Instrumentation column: a tonal shift and a hairline, no panel. */}
+        <aside className="flex min-h-0 flex-col border-l border-hair bg-raised">
+          <ExecutionTrace history={history} />
+        </aside>
+      </div>
+
+      {/* Footer: specification, run shape, state history. One band. */}
+      <footer className="shrink-0 border-t border-hair px-6 py-3">
+        <div className="flex items-center gap-8">
+          <div className="min-w-0 flex-1">
+            <SpecificationBar
               value={prompt}
               onChange={setPrompt}
               onBuild={runDemo}
@@ -251,29 +302,26 @@ export function RippleDashboard() {
               hasRun={revealed > 0}
             />
           </div>
-        </section>
 
-        <AgentActivity history={history} />
-      </div>
-
-      <div className="flex shrink-0 items-center justify-between border-t border-line bg-panel">
-        <StageProgress
-          stage={current?.stage ?? null}
-          failed={failing}
-          checkFailed={checkFailed}
-        />
-      </div>
-
-      <div className="shrink-0 border-t border-line bg-panel">
-        <BuildTimeline
-          snapshots={revealedSnapshots}
-          currentIndex={currentIndex}
-          totalCount={revealed}
-          isLive={isLive}
-          onScrub={scrubTo}
-          onReturnToLive={returnToLive}
-        />
-      </div>
+          {revealed > 0 ? (
+            <>
+              <StageRibbon
+                stage={current?.stage ?? null}
+                failed={failing}
+                checkFailed={checkFailed}
+              />
+              <HistoryGraph
+                snapshots={revealedSnapshots}
+                currentIndex={currentIndex}
+                totalCount={revealed}
+                isLive={isLive}
+                onScrub={scrubTo}
+                onReturnToLive={returnToLive}
+              />
+            </>
+          ) : null}
+        </div>
+      </footer>
     </div>
   );
 }

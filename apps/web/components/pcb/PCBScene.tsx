@@ -10,9 +10,13 @@ import type { PCBComponent, PCBState } from "@/lib/types";
 import { PCBBoard } from "./PCBBoard";
 import { PCBComponentMesh } from "./PCBComponentMesh";
 import { PCBTraceLine } from "./PCBTraceLine";
+import { RippleField, type RippleEvent } from "./RippleField";
+import { WorldEnvironment } from "./WorldEnvironment";
+import { WorldGrid } from "./WorldGrid";
 
-
-const HOME_POS = new Vector3(0, 9.5, 10);
+// Framed so the board fills roughly two thirds of the frame, with enough
+// height on the camera to read the board's thickness.
+const HOME_POS = new Vector3(0, 11.0, 12.2);
 const HOME_TARGET = new Vector3(0, 0, 0);
 
 /**
@@ -22,32 +26,48 @@ const HOME_TARGET = new Vector3(0, 0, 0);
  */
 function CameraRig({
   focus,
+  settled,
   enabled,
   controls,
 }: {
   focus: { x: number; y: number } | null;
+  /** On completion the camera eases back a touch, letting the board settle. */
+  settled: boolean;
   enabled: boolean;
   controls: React.RefObject<OrbitControlsImpl | null>;
 }) {
   const { camera } = useThree();
   const wantPos = useRef(new Vector3());
   const wantTarget = useRef(new Vector3());
+  // Milliseconds left of the ease back home after a focus is released. The rig
+  // only drives the camera while focused or returning — the rest of the time
+  // OrbitControls owns it outright, otherwise the two fight over position and
+  // the framing collapses.
+  const returning = useRef(0);
+  const hadFocus = useRef(false);
 
   useFrame((_, delta) => {
     if (!enabled) return;
 
-    if (focus) {
-      // Sit off to one side of the part rather than directly over it, so the
-      // annotation above it stays readable.
-      wantTarget.current.set(focus.x * 0.75, 0, -focus.y * 0.75);
-      wantPos.current.set(focus.x * 0.5, 7.2, -focus.y + 7.4);
+    const focused = focus !== null;
+    if (hadFocus.current && !focused) returning.current = 900;
+    hadFocus.current = focused;
+
+    if (!focused) {
+      returning.current = Math.max(0, returning.current - delta * 1000);
+      if (returning.current === 0) return;
+    }
+
+    if (focused) {
+      wantTarget.current.set(focus.x * 0.72, 0, -focus.y * 0.72);
+      wantPos.current.set(focus.x * 0.48, 7.6, -focus.y + 8.2);
     } else {
       wantTarget.current.copy(HOME_TARGET);
       wantPos.current.copy(HOME_POS);
+      if (settled) wantPos.current.multiplyScalar(1.05);
     }
 
-    // Frame-rate independent ease, ~600ms to settle.
-    const k = 1 - Math.exp(-delta * 4.5);
+    const k = 1 - Math.exp(-delta * 4.2);
     camera.position.lerp(wantPos.current, k);
     const c = controls.current;
     if (c) {
@@ -61,14 +81,14 @@ function CameraRig({
 
 export interface PCBSceneProps {
   pcb: PCBState;
-  /** Suppresses idle rotation while the build is running. */
   isRunning: boolean;
   selectedId: string | null;
-  /** Ids the snapshot diff reported as changed, and the version they changed at. */
   changedIds: ReadonlySet<string>;
   snapshotVersion: number;
-  /** Part the camera should bias toward — the current fault, if any. */
   focusId: string | null;
+  /** Change-propagation rings emitted for this snapshot. */
+  ripples: RippleEvent[];
+  complete: boolean;
   onSelect: (component: PCBComponent | null) => void;
 }
 
@@ -79,13 +99,14 @@ export function PCBScene({
   changedIds,
   snapshotVersion,
   focusId,
+  ripples,
+  complete,
   onSelect,
 }: PCBSceneProps) {
   const controls = useRef<OrbitControlsImpl>(null);
   const [userMoved, setUserMoved] = useState(false);
 
-  // Idle drift stops for good once the viewer takes the camera themselves.
-  const idle = !isRunning && !userMoved;
+  const idle = !isRunning && !userMoved && !complete && focusId === null;
 
   const focus = useMemo(() => {
     if (!focusId) return null;
@@ -96,19 +117,26 @@ export function PCBScene({
   return (
     <Canvas
       shadows
-      gl={{ alpha: true, antialias: true }}
       dpr={[1, 2]}
-      camera={{ position: [0, 9.5, 10], fov: 40, near: 0.1, far: 100 }}
+      camera={{ position: HOME_POS.toArray(), fov: 38, near: 0.1, far: 200 }}
+      resize={{ debounce: 0 }}
       onPointerMissed={() => onSelect(null)}
     >
-      <ambientLight intensity={0.55} />
+      <WorldEnvironment />
+      <WorldGrid />
+
+      {/* Low ambient so the key light does the shaping and the board keeps
+          its contrast against the dark surround. */}
+      <ambientLight intensity={0.34} />
       <directionalLight
-        position={[6, 12, 8]}
-        intensity={1.5}
+        position={[5.5, 11, 7]}
+        intensity={1.55}
         castShadow
         shadow-mapSize={[1024, 1024]}
+        shadow-bias={-0.0004}
       />
-      <directionalLight position={[-8, 6, -6]} intensity={0.45} color="#7fb3ff" />
+      {/* Cool rim from behind, to separate the board edge from the backdrop. */}
+      <directionalLight position={[-7, 4.5, -8]} intensity={0.5} color="#6fb3d8" />
 
       <PCBBoard width={pcb.board.width} height={pcb.board.height} />
 
@@ -126,12 +154,14 @@ export function PCBScene({
         />
       ))}
 
+      <RippleField events={ripples} />
+
       <ContactShadows
-        position={[0, -0.16, 0]}
-        opacity={0.5}
-        scale={22}
-        blur={2.4}
-        far={6}
+        position={[0, -0.17, 0]}
+        opacity={0.55}
+        scale={24}
+        blur={2.6}
+        far={7}
       />
 
       <OrbitControls
@@ -140,16 +170,21 @@ export function PCBScene({
         enableDamping
         dampingFactor={0.08}
         enablePan={false}
-        minDistance={6}
-        maxDistance={24}
+        minDistance={5.5}
+        maxDistance={22}
         maxPolarAngle={Math.PI / 2.15}
-        minPolarAngle={0.15}
+        minPolarAngle={0.14}
         autoRotate={idle}
-        autoRotateSpeed={0.35}
+        autoRotateSpeed={0.3}
         onStart={() => setUserMoved(true)}
       />
 
-      <CameraRig focus={focus} enabled={!userMoved} controls={controls} />
+      <CameraRig
+        focus={focus}
+        settled={complete}
+        enabled={!userMoved}
+        controls={controls}
+      />
     </Canvas>
   );
 }
