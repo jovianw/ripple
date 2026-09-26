@@ -24,6 +24,8 @@ Per-person task list and timings: DESIGN.md §6.
 
 **Web app (`apps/web`) reading backend data:** [docs/frontend-backend.md](docs/frontend-backend.md): read-only connection, what each collection holds, the query for each view, and known gaps.
 
+**Demo:** [docs/demo.md](docs/demo.md): pre-flight checks, terminals, the command for each demo segment, cleanup, and what to do if something breaks live.
+
 ## Rules
 
 - **Contracts are frozen.** `HarnessConfig` and `RunResult` in `packages/types` change only with team agreement.
@@ -65,6 +67,7 @@ Check tscircuit works: `npm run smoke` renders `examples/led-board.tsx` through 
 | `npm run queue:demo` | Work-queue kill-and-resume demo (Ctrl+C mid-run, rerun, it resumes) |
 | `npm run worker` | Serves spec requests from the web app (`spec_requests` change stream); restart resumes interrupted requests |
 | `npm run evolve` | Recursive-harnessing loop: batch → meta-agent proposal → config gate verdict (`-- --rounds N`, `-- --specs a,b`; spends model budget) |
+| `npm run board -- <spec_id> [--no-memory]` | One spec through the single-board loop, narrated: failures per attempt, critic diagnosis, lessons (demo segment 1) |
 
 ## Specs and parts
 

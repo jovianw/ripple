@@ -27,7 +27,8 @@
     "finale": "tsx --env-file-if-exists=.env scripts/finale-run.tsx",
     "evolve": "tsx --env-file-if-exists=.env scripts/evolve.ts",
     "worker": "tsx --env-file-if-exists=.env scripts/worker.ts",
-    "lessons": "tsx --env-file-if-exists=.env scripts/lessons.ts"
+    "lessons": "tsx --env-file-if-exists=.env scripts/lessons.ts",
+    "board": "tsx --env-file-if-exists=.env scripts/board.ts"
   },
   "devDependencies": {
     "@resvg/resvg-js": "2.6.2",

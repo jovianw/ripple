@@ -30,7 +30,7 @@ export type StoredRun = RunResult & {
   subcircuits_used?: string[];
 };
 /**
- * A spec submitted from the web app (inserted by the `ripple_requester` user, which can do nothing else).
+ * A spec submitted from the web app (inserted by the `ripple_requester` user, readWrite on this collection only).
  * The worker (`npm run worker`) claims it and writes everything else.
  */
 export type SpecRequest = {

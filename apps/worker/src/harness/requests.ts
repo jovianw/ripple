@@ -1,5 +1,5 @@
 // Spec requests from the web app. Owner: Jovian.
-// The web app can only insert into `spec_requests` (its `ripple_requester` user has no other rights). This worker side
+// The web app writes only to `spec_requests` (its `ripple_requester` user has readWrite on that collection alone). This worker side
 // claims requests atomically, runs them, and writes status back, so "one writer" still holds for all design state.
 // New requests arrive through an Atlas change stream; a slow poll backs it up in case the stream drops.
 import { setTimeout as sleep } from "node:timers/promises";
