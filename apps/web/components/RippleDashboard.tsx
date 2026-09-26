@@ -30,6 +30,45 @@ interface RunSource {
 
 const DEFAULT_PROMPT = "Build a USB-C powered blinky";
 
+// The worker keeps building whether or not this page is open, so the only
+// thing lost by navigating away is the browser's memory of which request was
+// yours. Parking it here means coming back reconnects to it.
+const ACTIVE_KEY = "ripple.activeBuild";
+const MAX_AGE_MS = 30 * 60 * 1000;
+
+interface ActiveBuild {
+  id: string;
+  prompt: string;
+  at: number;
+}
+
+function rememberBuild(active: ActiveBuild): void {
+  try {
+    window.localStorage.setItem(ACTIVE_KEY, JSON.stringify(active));
+  } catch {
+    // Private browsing or a full quota: reconnecting is a convenience, not a
+    // requirement, so losing it is fine.
+  }
+}
+
+function forgetBuild(): void {
+  try {
+    window.localStorage.removeItem(ACTIVE_KEY);
+  } catch {}
+}
+
+function recallBuild(): ActiveBuild | null {
+  try {
+    const raw = window.localStorage.getItem(ACTIVE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ActiveBuild;
+    if (!parsed?.id || Date.now() - parsed.at > MAX_AGE_MS) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 // Which board's deliverables the finished run corresponds to. Becomes the real
 // board id once runs are persisted; the panel takes it as a prop either way.
 const DELIVERABLES_BOARD_ID = "t04";
@@ -71,6 +110,8 @@ export function RippleDashboard() {
   >(null);
   const [source, setSource] = useState<RunSource | null>(null);
   const [buildError, setBuildError] = useState<string | null>(null);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [elapsed, setElapsed] = useState(0);
 
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   // Timers read liveness from a ref so scrubbing never has to cancel the run:
@@ -83,6 +124,17 @@ export function RippleDashboard() {
   }, []);
 
   useEffect(() => clearTimers, [clearTimers]);
+
+  // A visible clock while the worker thinks. Vague prompts burn the repair
+  // budget and can take half a minute, and silence reads as broken.
+  useEffect(() => {
+    if (startedAt === null) return;
+    const tick = setInterval(
+      () => setElapsed(Math.round((Date.now() - startedAt) / 1000)),
+      1000,
+    );
+    return () => clearInterval(tick);
+  }, [startedAt]);
 
   const play = useCallback(
     (sequence: BuildSnapshot[]) => {
@@ -126,6 +178,8 @@ export function RippleDashboard() {
     setSelected(null);
     setShowDeliverables(false);
     setAwaiting("submitting");
+    setStartedAt(Date.now());
+    setElapsed(0);
     setBuildError(null);
     setSource(null);
     setRequestId(null);
@@ -140,6 +194,7 @@ export function RippleDashboard() {
         if (r.ok && json?.request_id) {
           setRequestId(json.request_id);
           setAwaiting("queued");
+          rememberBuild({ id: json.request_id, prompt, at: Date.now() });
           return;
         }
         // Nothing is faked in its place: say why, and stop.
@@ -172,6 +227,7 @@ export function RippleDashboard() {
         ))?.runs ?? [];
 
       setAwaiting(null);
+      setStartedAt(null);
       setBuildError(null);
       setSource({ label: `real build · ${boardId.slice(0, 8)}` });
       play(
@@ -198,6 +254,8 @@ export function RippleDashboard() {
     setSource(null);
     setAwaiting(null);
     setBuildError(null);
+    setStartedAt(null);
+    forgetBuild();
   }, [clearTimers]);
 
   const scrubTo = useCallback((index: number) => {
@@ -236,6 +294,20 @@ export function RippleDashboard() {
       const kickoff = setTimeout(() => {
         setAwaiting("queued");
         setRequestId(request);
+      }, 0);
+      return () => clearTimeout(kickoff);
+    }
+
+    // Nothing asked for in the URL: pick up the last build started from this
+    // browser. If it finished while the page was closed, the poller sees
+    // "done" on its first tick and renders the board straight away.
+    const remembered = recallBuild();
+    if (remembered) {
+      const kickoff = setTimeout(() => {
+        setPrompt(remembered.prompt);
+        setAwaiting("queued");
+        setStartedAt(remembered.at);
+        setRequestId(remembered.id);
       }, 0);
       return () => clearTimeout(kickoff);
     }
@@ -378,9 +450,14 @@ export function RippleDashboard() {
                     : "Describe a board to begin synthesis."}
               </div>
               {awaiting ? (
-                <div className="mt-3 h-px w-40 bg-hair">
-                  <div className="breathe h-px w-full bg-accent" />
-                </div>
+                <>
+                  <div className="mt-2 font-mono text-[11px] text-faint [font-variant-numeric:tabular-nums]">
+                    {elapsed}s elapsed · typical build 15–35s
+                  </div>
+                  <div className="mt-3 h-px w-40 bg-hair">
+                    <div className="breathe h-px w-full bg-accent" />
+                  </div>
+                </>
               ) : null}
             </div>
           )}
