@@ -3,7 +3,7 @@ import Link from "next/link";
 type Tab = "board" | "harness" | "system";
 
 const TABS: { id: Tab; label: string; href: string }[] = [
-  { id: "board", label: "Board", href: "/" },
+  { id: "board", label: "Board", href: "/board" },
   { id: "harness", label: "Harness", href: "/harness" },
   { id: "system", label: "System", href: "/system" },
 ];

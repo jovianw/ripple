@@ -77,9 +77,22 @@ body {
   animation: breathe 1.6s ease-in-out infinite;
 }
 
+/* Landing mark: rings spreading out from the centre, like a dropped stone. */
+@keyframes ripple-out {
+  from { transform: scale(0.35); opacity: 0.9; }
+  to { transform: scale(1); opacity: 0; }
+}
+
+.ripple-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ripple-out 3.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .trace-in,
-  .breathe {
+  .breathe,
+  .ripple-ring {
     animation: none;
   }
 }

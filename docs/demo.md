@@ -20,7 +20,7 @@ Atlas, check Atlas → Network Access still allows your IP (venue Wi-Fi changes 
 
 | Terminal | Command | Why |
 |---|---|---|
-| 1. Web app | `npm run dev -w @ripple/web` → http://localhost:3000 (scripted view) and http://localhost:3000/live (live Atlas data) | The screen the judges watch. Needs `apps/web/.env.local` with `MONGODB_URI_READER`, `MONGODB_DB` (and `MONGODB_URI_REQUESTS` for the prompt box). |
+| 1. Web app | `npm run dev -w @ripple/web` → http://localhost:3000/board (build a board) and http://localhost:3000/system (live Atlas data); http://localhost:3000 is the landing page | The screen the judges watch. Needs `apps/web/.env.local` with `MONGODB_URI_READER`, `MONGODB_DB` (and `MONGODB_URI_REQUESTS` for the prompt box). |
 | 2. Worker | `npm run worker` | Runs specs submitted from the web prompt box. Leave it running; Ctrl+C then rerun resumes an interrupted request. |
 | 3. Driver | the commands below | Each demo segment. |
 

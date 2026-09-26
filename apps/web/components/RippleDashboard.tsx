@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { NavTabs } from "@/components/NavTabs";
 
 import { ExecutionTrace } from "@/components/activity/ExecutionTrace";
@@ -418,9 +419,12 @@ export function RippleDashboard() {
       {/* Product status bar. Two facts on the left, two on the right. */}
       <header className="flex h-12 shrink-0 items-center justify-between px-6">
         <div className="flex items-center gap-5">
-          <span className="text-[15px] font-medium tracking-[0.08em] text-ink">
+          <Link
+            href="/"
+            className="text-[15px] font-medium tracking-[0.08em] text-ink hover:text-accent"
+          >
             Ripple
-          </span>
+          </Link>
           <NavTabs active="board" />
         </div>
         <div className="flex items-center gap-5">
