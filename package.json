@@ -15,7 +15,8 @@
     "green": "tsx --env-file-if-exists=.env scripts/green-check.ts",
     "smoke": "tsx scripts/smoke-board.tsx",
     "verify:parts": "tsx scripts/verify-parts.tsx",
-    "test:checks": "TSX_TSCONFIG_PATH=checks/tsconfig.json tsx --test checks/**/*.test.tsx"
+    "test:checks": "TSX_TSCONFIG_PATH=checks/tsconfig.json tsx --test checks/**/*.test.tsx",
+    "test:assembler": "tsx --test apps/worker/src/assembler/assembler.test.ts"
   },
   "devDependencies": {
     "@tscircuit/checks": "0.0.208",
