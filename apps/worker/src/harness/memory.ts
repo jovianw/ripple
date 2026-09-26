@@ -101,20 +101,19 @@ const DUPLICATE_SCORE = 0.965;
  * a new pattern that restates an existing active lesson (score ≥ DUPLICATE_SCORE) returns that lesson's id instead.
  */
 export async function addLesson(lesson: { pattern: string; fix: string }): Promise<string> {
+  // A lesson retired in review stays retired: re-learning it, or a near-duplicate of it, returns its id
+  // unchanged. `npm run lessons -- restore <id>` is the only way back.
   const _id = hashId("lesson", lesson.pattern);
   const [embedding] = await embed([lessonText(lesson)], "document");
-  if (!(await col.lessons.countDocuments({ _id }, { limit: 1 }))) {
-    const [near] = await vectorSearch(col.lessons, "lessons_vec", embedding, 1, { active: true });
-    if (near && near.score >= DUPLICATE_SCORE) return near._id;
+  const existing = await col.lessons.findOne({ _id }, { projection: { active: 1 } });
+  if (existing) {
+    if (existing.active === false) return _id;
+    await col.lessons.updateOne({ _id }, { $set: { pattern: lesson.pattern, fix: lesson.fix, embedding } });
+    return _id;
   }
-  await col.lessons.updateOne(
-    { _id },
-    {
-      $set: { pattern: lesson.pattern, fix: lesson.fix, embedding, active: true },
-      $setOnInsert: { times_helped: 0, created_at: new Date() },
-    },
-    { upsert: true },
-  );
+  const [near] = await vectorSearch(col.lessons, "lessons_vec", embedding, 1);
+  if (near && near.score >= DUPLICATE_SCORE) return near._id;
+  await col.lessons.insertOne({ _id, pattern: lesson.pattern, fix: lesson.fix, embedding, active: true, times_helped: 0, created_at: new Date() } as StoredLesson);
   return _id;
 }
 

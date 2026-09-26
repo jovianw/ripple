@@ -19,6 +19,7 @@
     "test:checks": "TSX_TSCONFIG_PATH=checks/tsconfig.json tsx --test checks/**/*.test.tsx",
     "test:assembler": "tsx --test apps/worker/src/assembler/assembler.test.ts",
     "test:gate": "MONGODB_URI=mongodb://127.0.0.1:1/unused tsx --test apps/worker/src/harness/gate.test.ts",
+    "test:critic": "tsx --test apps/worker/src/agents/critic/critic.test.ts",
     "try:critic": "tsx --env-file-if-exists=.env scripts/try-critic.tsx",
     "test:planner": "tsx --test apps/worker/src/agents/planner/planner.test.tsx",
     "try:planner": "tsx --env-file-if-exists=.env scripts/try-planner.ts",
@@ -30,7 +31,8 @@
     "worker": "tsx --env-file-if-exists=.env scripts/worker.ts",
     "lessons": "tsx --env-file-if-exists=.env scripts/lessons.ts",
     "board": "tsx --env-file-if-exists=.env scripts/board.ts",
-    "seed:specs": "tsx --env-file-if-exists=.env scripts/seed-specs.ts"
+    "seed:specs": "tsx --env-file-if-exists=.env scripts/seed-specs.ts",
+    "test:meta": "tsx --test apps/worker/src/agents/meta.test.ts"
   },
   "devDependencies": {
     "@resvg/resvg-js": "2.6.2",

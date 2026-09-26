@@ -2,15 +2,17 @@
 
 import { Grid } from "@react-three/drei";
 
+import { BOARD_BOTTOM } from "./pcbScene.shared";
+
 /**
- * CAD reference plane. Sits below the board so the board reads as hovering in
- * a workspace, and fades toward the horizon so it gives depth without competing
+ * CAD reference plane. The board rests on it, so it stays level with the grid
+ * from any angle, and fades toward the horizon so it gives depth without competing
  * with the copper.
  */
 export function WorldGrid() {
   return (
     <Grid
-      position={[0, -2.2, 0]}
+      position={[0, BOARD_BOTTOM - 0.004, 0]}
       args={[80, 80]}
       infiniteGrid
       cellSize={1}

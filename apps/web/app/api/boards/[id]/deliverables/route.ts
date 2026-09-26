@@ -3,19 +3,19 @@
 //   GET /api/boards/:id/deliverables          -> manifest.json
 //   GET /api/boards/:id/deliverables?file=... -> one file with its mime
 //
-// Today this serves a pre-generated bundle: buildDeliverables takes a couple of
-// seconds, which is fine for a CLI and far too slow to sit in front of a live
-// demo. When boards are in Atlas, swap resolveManifest for:
-//
-//   const board = await boards.findOne({ _id: id })
-//   const d = await buildDeliverables({ circuitJson: board.circuit_json, name: id, ... })
-//
-// and keep the responses identical. Node runtime, never Edge: the exporter
-// depends on @resvg/resvg-js, which is native.
+// Two sources, same responses:
+//   - a pre-generated bundle in public/deliverables/<id>/ (the t04 example, with
+//     Gerbers, KiCad, 3D and zips);
+//   - for boards the worker built, the views it stored on the board's latest
+//     Atlas record (`deliverables`: PCB and schematic SVG, BOM, netlist). Those
+//     manifests carry `live: true` and have no zips.
+// Node runtime, never Edge.
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
+
+import { db, readAtlas } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -33,6 +33,13 @@ interface Manifest {
   generated_at: string;
   metrics: Record<string, number>;
   files: ManifestFile[];
+  /** Built by the worker and read from Atlas: views only, no download bundle. */
+  live?: boolean;
+}
+
+interface StoredViews {
+  manifest: Manifest;
+  files: { path: string; content: string }[];
 }
 
 const bundleDir = (id: string) =>
@@ -50,6 +57,19 @@ async function readManifest(id: string): Promise<Manifest | null> {
   }
 }
 
+/** The views the worker stored on this board's latest record that has them. */
+async function readStoredViews(id: string): Promise<StoredViews | null> {
+  const res = await readAtlas(() =>
+    db()
+      .collection<{ board_id: string; deliverables?: StoredViews }>("boards")
+      .find({ board_id: id, deliverables: { $exists: true } }, { projection: { deliverables: 1 } })
+      .sort({ created_at: -1 })
+      .limit(1)
+      .next(),
+  );
+  return res.ok ? (res.data?.deliverables ?? null) : null;
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -59,12 +79,24 @@ export async function GET(
     return NextResponse.json({ error: "bad board id" }, { status: 400 });
   }
 
+  const wanted = new URL(request.url).searchParams.get("file");
   const manifest = await readManifest(id);
   if (!manifest) {
-    return NextResponse.json({ error: `no deliverables for ${id}` }, { status: 404 });
+    const stored = await readStoredViews(id);
+    if (!stored) {
+      return NextResponse.json({ error: `no deliverables for ${id}` }, { status: 404 });
+    }
+    if (!wanted) return NextResponse.json({ ...stored.manifest, live: true });
+    const file = stored.files.find((f) => f.path === wanted);
+    const entry = stored.manifest.files.find((f) => f.path === wanted);
+    if (!file || !entry) {
+      return NextResponse.json({ error: `not in manifest: ${wanted}` }, { status: 404 });
+    }
+    return new NextResponse(file.content, {
+      headers: { "content-type": entry.mime, "cache-control": "no-store" },
+    });
   }
 
-  const wanted = new URL(request.url).searchParams.get("file");
   if (!wanted) return NextResponse.json(manifest);
 
   // Only ever serve a path the manifest itself lists — no traversal, no guessing.

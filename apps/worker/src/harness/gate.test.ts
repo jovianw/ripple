@@ -86,7 +86,7 @@ function fakeRuns(rows: Record<string, ReturnType<typeof row>>): GateStore["runs
 const noBatch: RunBatch = () => {
   throw new Error("runBatch should not have been called")
 }
-const store = (harness: GateStore["harness"]): GateStore => ({ harness, runs: {} as GateStore["runs"] })
+const store = (harness: GateStore["harness"], runs: GateStore["runs"] = {} as GateStore["runs"]): GateStore => ({ harness, runs })
 
 describe("evaluatePending concurrency", () => {
   test("two concurrent callers never both claim and decide the same pending version", async () => {
@@ -227,5 +227,35 @@ describe("scoreVersion / specQuality", () => {
   test("specQuality refuses a batch that built the same spec twice", async () => {
     const store = { harness: {} as GateStore["harness"], runs: fakeRuns({ a: row("a", "t01", true), b: row("b", "t01", true) }) }
     await assert.rejects(specQuality(0, { boardIds: ["a", "b"], store }), /more than one board/)
+  })
+})
+
+describe("evaluatePending parent scoring", () => {
+  const seed = () => [
+    cfg({ version: 0, parent: null, verdict: "kept", scores: { checks_passed: 0, attempts_per_board: 2.5, cost_per_board_usd: 0.002 } }),
+    cfg({ version: 1, parent: 0, verdict: "pending", rules: ["new rule"] }),
+  ]
+  // Tonight's parent batch: 2/2 passed. The candidate: 1/2. The stored v0 scores (0%) are from an older round.
+  const runs = fakeRuns({ p1: row("p1", "t01", true), p2: row("p2", "t02", true), c1: row("c1", "t01", true), c2: row("c2", "t02", false) })
+
+  test("with parentBoardIds the parent is scored from that batch, not its stale stored scores", async () => {
+    const harness = fakeHarness(seed())
+    const batch: RunBatch = async () => ({ boardIds: ["c1", "c2"] })
+    const decision = await evaluatePending(batch, { store: store(harness, runs), parentBoardIds: ["p1", "p2"] })
+    assert.equal(decision?.verdict, "rolled_back")
+    assert.match(decision!.reasons[0], /v1 pass 50%.*vs v0 pass 100%/)
+    assert.equal((await harness.findOne({ version: 0 }))!.scores!.checks_passed, 1)
+  })
+
+  test("without parentBoardIds a parent batch is run: stored scores are never reused for the comparison", async () => {
+    const ran: number[] = []
+    const batch: RunBatch = async (config) => {
+      ran.push(config.version)
+      return { boardIds: config.version === 0 ? ["p1", "p2"] : ["c1", "c2"] }
+    }
+    const decision = await evaluatePending(batch, { store: store(fakeHarness(seed()), runs) })
+    assert.deepEqual(ran, [0, 1])
+    assert.equal(decision?.verdict, "rolled_back")
+    assert.match(decision!.reasons[0], /vs v0 pass 100%/)
   })
 })

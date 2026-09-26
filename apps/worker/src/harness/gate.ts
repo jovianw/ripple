@@ -66,7 +66,7 @@ const mean = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / xs.length;
 
 /**
  * Scores a version from its runs. Per board: passed if any attempt passed, attempts = "checks" runs,
- * cost = every run's cost_usd (coder, critic, optimize, ...), check_score = best attempt's partial credit.
+ * cost = every run's cost_usd (coder, critic, ...), check_score = best attempt's partial credit.
  * Then averaged over boards: checks_passed = share of boards that passed all hidden checks.
  * `board` = mean quality of the kept boards of the passing ones (display: the gate compares quality per spec).
  * Pass `boardIds` to score one batch only (the gate does); omit to score everything run under that version.
@@ -280,12 +280,13 @@ export async function evaluatePending(
     if (violations.length)
       return await record({ version: candidate.version, parent: parent.version, verdict: "rejected", reasons: violations });
 
+    // The parent is scored on its own fresh boards of the same specs: the batch just run under it (parentBoardIds),
+    // or a parent batch. Its stored scores may come from an earlier round with different specs, and board quality
+    // is compared spec by spec, so they're never reused for the comparison. The fresh scores replace them.
     const parentBoardIds = opts.parentBoardIds?.length ? opts.parentBoardIds : (await runBatch(parent)).boardIds;
     const before = await scoreBatch(parent.version, parentBoardIds, store);
     const parentScores = before.scores;
-    // A parent scored before partial credit existed gets these scores, so the UI can show deltas against it.
-    if (parent.scores?.check_score === undefined)
-      await store.harness.updateOne({ version: parent.version }, { $set: { scores: stripBoards(parentScores) } });
+    await store.harness.updateOne({ version: parent.version }, { $set: { scores: stripBoards(parentScores) } });
     const after = await scoreBatch(candidate.version, (await runBatch(candidate)).boardIds, store);
     const scores = after.scores;
     const quality = qualityVsParent(after.quality, before.quality);

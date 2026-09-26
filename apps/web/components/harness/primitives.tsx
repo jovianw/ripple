@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { Actor, ObservationStatus } from "@/lib/harness-observability";
 
 export const ACTOR_LABEL: Record<Actor, string> = {
@@ -55,6 +56,37 @@ export function Field({
       <div className={`mt-0.5 text-[13px] text-ink ${mono ? "font-mono" : ""}`}>
         {children}
       </div>
+    </div>
+  );
+}
+
+/**
+ * A toggle for detail that's real but not worth showing by default — full rule text, a long memory
+ * list. `label` stays visible always (put the count/summary there); `children` only renders when open.
+ */
+export function Disclosure({
+  label,
+  defaultOpen = false,
+  children,
+}: {
+  label: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 text-[11px] text-faint hover:text-dim"
+      >
+        <span className={`inline-block text-[9px] transition-transform ${open ? "rotate-90" : ""}`} aria-hidden>
+          ▶
+        </span>
+        {label}
+      </button>
+      {open ? <div className="mt-1.5">{children}</div> : null}
     </div>
   );
 }

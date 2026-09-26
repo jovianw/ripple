@@ -17,8 +17,15 @@ boards, compared spec by spec (smaller area, routing closer to straight lines, f
 BOM); then fewer attempts per board; then lower cost. Correctness always comes before board quality.
 
 Rules:
-- Propose the smallest change that addresses the most common failure pattern in the batch. If the batch shows
-  no clear, repeated problem, set "change" to false and every other field to null.
+- Propose the smallest change that addresses the most common failure CAUSE in the batch (read the failure
+  details and the critic's diagnoses, not just the check names). If the batch shows no clear, repeated
+  problem, set "change" to false and every other field to null.
+- Prefer adding a rule: one concrete sentence the coder is given before it writes code, stating what to do
+  (e.g. "Give every part explicit pcbX/pcbY so courtyards never overlap; leave at least 2mm between parts").
+  A rule fixes the cause for every future board at no cost. The lessons the critic wrote during the batch are
+  good raw material: promote the one that addresses the most boards, worded as an instruction. Never repeat a
+  rule that is already in the current rule list.
+- Change context, tools, workflow or routing only when the failures are clearly not something a rule can fix.
 - "rules" is the COMPLETE new rule list if you change it (existing rules you want to keep, plus new ones),
   not just additions. Set it to null to leave rules unchanged.
 - For context/tools/workflow/routing, set a field to null to leave it unchanged; only set fields you are
@@ -115,19 +122,57 @@ function toConfigChange(raw: MetaRawOutput): ConfigChange {
   };
 }
 
-function summarizeBatch(results: RunBoardResult[]): string {
+/** Component designators and numbers vary per board; strip them so the same cause counts once. */
+function normalizeDetail(detail: string): string {
+  return detail
+    .replace(/\b[A-Z][A-Z0-9_]*\.[A-Za-z0-9_]+\b/g, "PIN") // U1.VCC, HEADER.SDA
+    .replace(/\b(?:[RCUJDQLYK]|LED|SW|USB|LDO|MCU|HEADER|SENSOR)[A-Z_]*\d*\b/g, "PART")
+    .replace(/-?\d+(?:\.\d+)?\s*(?:mm|k|uF|nF|pF|Ω|ohm)?/g, "N")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 160);
+}
+
+function topN<T>(counts: Map<T, number>, n: number): [T, number][] {
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
+}
+
+/**
+ * What the meta-agent reads. Failure counts by check, then the most common failure details (normalized so
+ * the same cause on different boards counts once), the critic's diagnoses, and the lessons the critic wrote
+ * during the batch, plus the current rules so the proposal can build on them without repeating one.
+ */
+export function summarizeBatch(results: RunBoardResult[], config?: Pick<HarnessConfig, "rules">): string {
   const total = results.length;
   const passed = results.filter((r) => r.runResult.passed).length;
   const avgAttempts = results.reduce((s, r) => s + r.attempts, 0) / Math.max(1, total);
   const avgCost = results.reduce((s, r) => s + (r.runResult.cost_usd ?? 0), 0) / Math.max(1, total);
 
   const failureCounts = new Map<string, number>();
+  const detailCounts = new Map<string, number>();
+  const detailBoards = new Map<string, Set<string>>();
   for (const r of results) {
-    for (const f of r.runResult.failures) failureCounts.set(f.check, (failureCounts.get(f.check) ?? 0) + 1);
+    const seenChecks = new Set<string>();
+    for (const f of r.runResult.failures) {
+      if (!seenChecks.has(f.check)) { seenChecks.add(f.check); failureCounts.set(f.check, (failureCounts.get(f.check) ?? 0) + 1); }
+      const key = `${f.check}: ${normalizeDetail(f.detail)}`;
+      detailCounts.set(key, (detailCounts.get(key) ?? 0) + 1);
+      (detailBoards.get(key) ?? detailBoards.set(key, new Set()).get(key)!).add(r.specId);
+    }
   }
-  const failureLines = [...failureCounts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([check, n]) => `- ${check}: ${n}/${total} boards`);
+  const failureLines = topN(failureCounts, 10).map(([check, n]) => `- ${check}: ${n}/${total} boards`);
+  const detailLines = topN(detailCounts, 8).map(([key, n]) => `- (${n}x on ${detailBoards.get(key)!.size} boards) ${key}`);
+
+  const causeCounts = new Map<string, number>();
+  const lessonCounts = new Map<string, number>();
+  for (const r of results) {
+    for (const c of r.criticResults) {
+      for (const d of c.diagnosis) causeCounts.set(`${d.check}: ${d.cause.slice(0, 160)}`, (causeCounts.get(`${d.check}: ${d.cause.slice(0, 160)}`) ?? 0) + 1);
+      for (const l of c.lessons) lessonCounts.set(`${l.pattern} -> ${l.fix}`.slice(0, 220), (lessonCounts.get(`${l.pattern} -> ${l.fix}`.slice(0, 220)) ?? 0) + 1);
+    }
+  }
+  const causeLines = topN(causeCounts, 8).map(([c, n]) => `- (${n}x) ${c}`);
+  const lessonLines = topN(lessonCounts, 6).map(([l, n]) => `- (${n}x) ${l}`);
 
   const escalations = results.flatMap((r) => r.criticResults.filter((c) => c.escalate).map((c) => c.escalate_reason));
   const avgPartial = results.reduce((s, r) => s + r.checkScore, 0) / Math.max(1, total);
@@ -136,9 +181,9 @@ function summarizeBatch(results: RunBoardResult[]): string {
     const head = `- ${r.specId}: ${r.runResult.passed ? "passed" : "failed"}, partial ${(r.checkScore * 100).toFixed(0)}%`;
     const m = r.runResult.passed ? r.coderResult?.metrics : undefined;
     if (!m) return head;
-    const opt = r.optimize ? `; optimize pass ${r.optimize.adopted ? "adopted" : "not adopted"}` : "";
-    return `${head}; ${m.area_mm2.toFixed(0)} mm², parts cover ${(m.density * 100).toFixed(0)}%, routing ${m.detour.toFixed(2)}x straight-line, ${m.vias} vias, ${m.parts} parts, BOM $${m.bom_usd.toFixed(2)}${opt}`;
+    return `${head}; ${m.area_mm2.toFixed(0)} mm², parts cover ${(m.density * 100).toFixed(0)}%, routing ${m.detour.toFixed(2)}x straight-line, ${m.vias} vias, ${m.parts} parts, BOM $${m.bom_usd.toFixed(2)}`;
   });
+  const rules = config?.rules ?? [];
 
   return `## Batch results
 ${passed}/${total} boards passed. Average partial credit: ${(avgPartial * 100).toFixed(0)}%. Average attempts per board: ${avgAttempts.toFixed(2)}. Average cost per board: $${avgCost.toFixed(4)}.
@@ -146,11 +191,23 @@ ${passed}/${total} boards passed. Average partial credit: ${(avgPartial * 100).t
 ## Boards (the kept board's size, routing and BOM for the ones that passed)
 ${boardLines.join("\n")}
 
-## Failure counts (by check, most common first)
+## Failure counts (boards failing each check, most common first)
 ${failureLines.length ? failureLines.join("\n") : "(none — every board passed)"}
 
+## Most common failure details (part names and numbers replaced by PART / PIN / N)
+${detailLines.length ? detailLines.join("\n") : "(none)"}
+
+## What the critic diagnosed as the cause
+${causeLines.length ? causeLines.join("\n") : "(no critic calls)"}
+
+## Lessons the critic wrote during this batch
+${lessonLines.length ? lessonLines.join("\n") : "(none)"}
+
 ## Critic escalations (fix needed a different architecture, not just a retry)
-${escalations.length ? escalations.map((r) => `- ${r}`).join("\n") : "(none)"}`;
+${escalations.length ? escalations.map((r) => `- ${r}`).join("\n") : "(none)"}
+
+## Current rules the coder is already given
+${rules.length ? rules.map((r) => `- ${r}`).join("\n") : "(none)"}`;
 }
 
 /** True when the change would leave the config exactly as it is. */
@@ -170,7 +227,7 @@ function isNoOp(change: ConfigChange, config: HarnessConfig): boolean {
  */
 export async function proposeFromBatch(results: RunBoardResult[], config: HarnessConfig): Promise<HarnessConfig | null> {
   const complete = createComplete("meta", config);
-  const raw = (await complete(META_SYSTEM, summarizeBatch(results), META_SCHEMA)) as MetaRawOutput;
+  const raw = (await complete(META_SYSTEM, summarizeBatch(results, config), META_SCHEMA)) as MetaRawOutput;
 
   // The meta call is batch-level, not board-level, so it gets a synthetic board_id rather
   // than one of the batch's real boards — scoreVersion's per-board average (gate, ablation)

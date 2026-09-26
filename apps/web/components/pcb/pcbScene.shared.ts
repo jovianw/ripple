@@ -8,6 +8,8 @@ import type { PCBComponentType, PCBStatus } from "@/lib/types";
 export const BOARD_THICKNESS = 0.28;
 /** Top face of the substrate; everything sits on or above this. */
 export const BOARD_TOP = BOARD_THICKNESS / 2;
+/** Underside of the substrate; the grid and contact shadow sit just below it. */
+export const BOARD_BOTTOM = -BOARD_THICKNESS / 2;
 /** Traces float just clear of the substrate to avoid z-fighting. */
 export const TRACE_LIFT = 0.014;
 

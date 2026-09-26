@@ -8,11 +8,9 @@ import { ACTOR_LABEL, fmtCost, fmtTokens } from "./primitives";
 export function CurrentExecution({
   latest,
   running,
-  harnessVersion,
 }: {
   latest: HarnessObservation | null;
   running: QueueItemDoc | null;
-  harnessVersion: number | null;
 }) {
   if (!latest) {
     return (
@@ -46,19 +44,9 @@ export function CurrentExecution({
       </div>
 
       <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[12px] text-faint">
-        {latest.stage ? (
-          <span>
-            stage <span className="font-mono text-dim">{latest.stage}</span>
-          </span>
-        ) : null}
-        {harnessVersion !== null ? (
-          <span>
-            harness{" "}
-            <span className="font-mono text-dim">
-              v{String(harnessVersion).padStart(2, "0")}
-            </span>
-          </span>
-        ) : null}
+        {/* stage: dropped — the design-loop diagram right below highlights the same stage.
+            harness version: dropped — it's persistent context, already shown in the Inspector panel
+            and the Harness configuration section, not a fact specific to this event. */}
         {latest.modelTier ? (
           <span>
             {latest.usageBelongsToProducer ? "producer model" : "model"}{" "}

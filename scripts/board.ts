@@ -1,6 +1,6 @@
 // Runs one spec through the single-board loop and narrates it: each attempt's hidden-check failures and partial
-// credit, the critic's diagnosis and the lessons it stored, the lessons retrieved from memory, and what the optimize
-// pass did to the passing board. Demo segment 1 from the CLI.
+// credit, the critic's diagnosis and the lessons it stored, the lessons retrieved from memory, and the passing board's
+// size, routing and BOM. Demo segment 1 from the CLI.
 //   npm run board -- t04_i2c_temp_breakout
 //   npm run board -- t04_i2c_temp_breakout --no-memory   (run as if memory were empty, to show a first failure)
 import specs from "../specs/specs.json" with { type: "json" };
@@ -17,11 +17,10 @@ interface Critic {
 // Dynamic import: scripts/tsconfig.json can't statically walk tscircuit (same as scripts/ablation.ts).
 const { runBoard } = (await import(new URL("../apps/worker/src/agents/coder-loop.ts", import.meta.url).href)) as {
   runBoard: (specId: string, config: HarnessConfig, opts: { useMemory?: boolean; writeMemory?: boolean }) =>
-    Promise<{ boardId: string; attempts: number; runResult: RunResult; criticResults: Critic[]; optimize?: Optimize }>;
+    Promise<{ boardId: string; attempts: number; runResult: RunResult; criticResults: Critic[]; coderResult?: { metrics: Quality } }>;
 };
 
 interface Quality { area_mm2: number; density: number; detour: number; vias: number; parts: number; bom_usd: number }
-interface Optimize { adopted: boolean; ratio: number | null; before: Quality; after?: Quality; failures: { check: string; detail: string }[] }
 const describe = (q: Quality) =>
   `${q.area_mm2.toFixed(0)} mm² (parts cover ${(q.density * 100).toFixed(0)}%), routing ${q.detour.toFixed(2)}x straight-line, ${q.vias} vias, ${q.parts} parts, BOM $${q.bom_usd.toFixed(2)}`;
 
@@ -55,14 +54,7 @@ graded.forEach((run, i) => {
     for (const l of c.lessons.slice(0, 3)) console.log(`   lesson: ${l.pattern} → ${l.fix.slice(0, 90)}`);
   }
 });
-if (r.optimize) {
-  const o = r.optimize;
-  console.log(`
-optimize pass: ${o.adopted ? "ADOPTED" : "not adopted"}${o.ratio === null ? "" : `, ${o.ratio >= 1 ? "+" : "−"}${(Math.abs(o.ratio - 1) * 100).toFixed(0)}% board quality`}`);
-  console.log(`   before: ${describe(o.before)}`);
-  if (o.after) console.log(`   after:  ${describe(o.after)}`);
-  for (const f of o.failures.slice(0, 3)) console.log(`   ✗ ${f.check}: ${f.detail.slice(0, 110)}`);
-}
+if (r.runResult.passed && r.coderResult) console.log(`\nboard: ${describe(r.coderResult.metrics)}`);
 const cost = runs.reduce((s, x) => s + (x.cost_usd ?? 0), 0);
 console.log(`\n${r.runResult.passed ? "PASSED" : "did not pass"} in ${r.attempts} attempt(s), $${cost.toFixed(4)}; board ${r.boardId}`);
 await client.close();

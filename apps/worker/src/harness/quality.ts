@@ -1,4 +1,4 @@
-// Board quality comparisons. Owner: Jovian. Pure functions shared by the gate, the optimize pass and the ablation.
+// Board quality comparisons. Owner: Jovian. Pure functions shared by the gate and the ablation.
 // Quality is only ever compared between boards of the same spec: absolute numbers depend on what the spec asks
 // for, and density can be inflated with bigger footprints, so neither is compared across specs.
 

@@ -13,7 +13,6 @@ import { Telemetry } from "@/components/build/Telemetry";
 import { ComponentInspector } from "@/components/pcb/ComponentInspector";
 import { PCBViewport } from "@/components/pcb/PCBViewport";
 import { WorldHud } from "@/components/pcb/WorldHud";
-import { DEFAULT_PROMPT, DEMO_SNAPSHOTS } from "@/lib/demoSnapshots";
 import { buildSnapshotsFromBoard, type RealBoardPayload } from "@/lib/realRun";
 import { deriveMetrics } from "@/lib/metrics";
 import { diffPCBStates } from "@/lib/pcbDiff";
@@ -24,15 +23,54 @@ import type { RunDoc } from "@/lib/live";
 // A run is just a BuildSnapshot[]. It can come from the scripted walkthrough
 // or from a board Ripple actually built — the scene cannot tell the difference,
 // which is the point of the seam.
+/** Every board on this page is one Ripple actually built. */
 interface RunSource {
-  kind: "scripted" | "real";
   label: string;
 }
 
-const SCRIPTED: RunSource = { kind: "scripted", label: "scripted walkthrough" };
+const DEFAULT_PROMPT = "Build a USB-C powered blinky";
 
-// Which board's deliverables the finished run corresponds to. Becomes the real
-// board id once runs are persisted; the panel takes it as a prop either way.
+// The worker keeps building whether or not this page is open, so the only
+// thing lost by navigating away is the browser's memory of which request was
+// yours. Parking it here means coming back reconnects to it.
+const ACTIVE_KEY = "ripple.activeBuild";
+const MAX_AGE_MS = 30 * 60 * 1000;
+
+interface ActiveBuild {
+  id: string;
+  prompt: string;
+  at: number;
+}
+
+function rememberBuild(active: ActiveBuild): void {
+  try {
+    window.localStorage.setItem(ACTIVE_KEY, JSON.stringify(active));
+  } catch {
+    // Private browsing or a full quota: reconnecting is a convenience, not a
+    // requirement, so losing it is fine.
+  }
+}
+
+function forgetBuild(): void {
+  try {
+    window.localStorage.removeItem(ACTIVE_KEY);
+  } catch {}
+}
+
+function recallBuild(): ActiveBuild | null {
+  try {
+    const raw = window.localStorage.getItem(ACTIVE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ActiveBuild;
+    if (!parsed?.id || Date.now() - parsed.at > MAX_AGE_MS) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+// The example bundle (public/deliverables/t04) the panel shows until a real
+// build has loaded; after that it shows the worker's views for that board.
 const DELIVERABLES_BOARD_ID = "t04";
 
 /** One canonical status for the whole system; details live elsewhere. */
@@ -65,8 +103,17 @@ export function RippleDashboard() {
   const [isRunning, setIsRunning] = useState(false);
   const [selected, setSelected] = useState<PCBComponent | null>(null);
   const [showDeliverables, setShowDeliverables] = useState(false);
-  const [snapshots, setSnapshots] = useState<BuildSnapshot[]>(DEMO_SNAPSHOTS);
-  const [source, setSource] = useState<RunSource>(SCRIPTED);
+  /** The board the worker just built, once it's loaded; the deliverables panel shows its views. */
+  const [realBoardId, setRealBoardId] = useState<string | null>(null);
+  const [snapshots, setSnapshots] = useState<BuildSnapshot[]>([]);
+  // Non-null while a real build is in flight: what the worker is doing now.
+  const [awaiting, setAwaiting] = useState<
+    "submitting" | "queued" | "running" | null
+  >(null);
+  const [source, setSource] = useState<RunSource | null>(null);
+  const [buildError, setBuildError] = useState<string | null>(null);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [elapsed, setElapsed] = useState(0);
 
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   // Timers read liveness from a ref so scrubbing never has to cancel the run:
@@ -79,6 +126,17 @@ export function RippleDashboard() {
   }, []);
 
   useEffect(() => clearTimers, [clearTimers]);
+
+  // A visible clock while the worker thinks. Vague prompts burn the repair
+  // budget and can take half a minute, and silence reads as broken.
+  useEffect(() => {
+    if (startedAt === null) return;
+    const tick = setInterval(
+      () => setElapsed(Math.round((Date.now() - startedAt) / 1000)),
+      1000,
+    );
+    return () => clearInterval(tick);
+  }, [startedAt]);
 
   const play = useCallback(
     (sequence: BuildSnapshot[]) => {
@@ -113,10 +171,19 @@ export function RippleDashboard() {
   const [requestId, setRequestId] = useState<string | null>(null);
   const [requestNote, setRequestNote] = useState<string | null>(null);
   const build = useCallback(() => {
-    // The scripted walkthrough starts at once so the screen is never dead
-    // while the worker thinks; the real board replaces it when it lands.
-    setSource(SCRIPTED);
-    play(DEMO_SNAPSHOTS);
+    // Don't animate a board nobody asked for. The worker takes a few seconds;
+    // until it answers, the view waits on the real request and says so. The
+    // scripted walkthrough is the fallback for when there is no worker at all.
+    clearTimers();
+    setRevealed(0);
+    setCurrentIndex(-1);
+    setSelected(null);
+    setShowDeliverables(false);
+    setAwaiting("submitting");
+    setStartedAt(Date.now());
+    setElapsed(0);
+    setBuildError(null);
+    setSource(null);
     setRequestId(null);
     setRequestNote(null);
     fetch("/api/spec", {
@@ -126,11 +193,23 @@ export function RippleDashboard() {
     })
       .then(async (r) => {
         const json = await r.json().catch(() => null);
-        if (r.ok && json?.request_id) setRequestId(json.request_id);
-        else setRequestNote(`Real build not sent: ${json?.error ?? r.statusText}`);
+        if (r.ok && json?.request_id) {
+          setRequestId(json.request_id);
+          setAwaiting("queued");
+          rememberBuild({ id: json.request_id, prompt, at: Date.now() });
+          return;
+        }
+        // Nothing is faked in its place: say why, and stop.
+        setRequestNote(null);
+        setAwaiting(null);
+        setBuildError(json?.error ?? r.statusText ?? "the worker did not accept the request");
       })
-      .catch(() => setRequestNote("Real build not sent: the server is unreachable"));
-  }, [play, prompt]);
+      .catch(() => {
+        setRequestNote(null);
+        setAwaiting(null);
+        setBuildError("the server is unreachable");
+      });
+  }, [prompt, clearTimers]);
 
   /**
    * The worker finished the specification that was submitted. Swap the
@@ -142,17 +221,23 @@ export function RippleDashboard() {
       const payload = await getJson<RealBoardPayload & { error?: string }>(
         `/api/boards/${encodeURIComponent(boardId)}`,
       );
-      if (!payload || payload.error || !payload.pcb?.components?.length) return;
+      if (!payload || payload.error || !payload.pcb?.components?.length) {
+        setAwaiting(null);
+        setStartedAt(null);
+        setBuildError(payload?.error ?? "the finished board could not be loaded");
+        return;
+      }
 
       const runs =
         (await getJson<{ runs?: RunDoc[] }>(
           `/api/runs?board_id=${encodeURIComponent(boardId)}&limit=50`,
         ))?.runs ?? [];
 
-      setSource({
-        kind: "real",
-        label: `real build · ${boardId.slice(0, 8)}`,
-      });
+      setAwaiting(null);
+      setStartedAt(null);
+      setBuildError(null);
+      setSource({ label: `real build · ${boardId.slice(0, 8)}` });
+      setRealBoardId(boardId);
       play(
         buildSnapshotsFromBoard({
           spec: { _id: payload.board.spec_id ?? "free text", text: prompt },
@@ -166,6 +251,7 @@ export function RippleDashboard() {
 
   const reset = useCallback(() => {
     clearTimers();
+    setRealBoardId(null);
     liveRef.current = true;
     setIsLive(true);
     setIsRunning(false);
@@ -173,8 +259,12 @@ export function RippleDashboard() {
     setCurrentIndex(-1);
     setSelected(null);
     setShowDeliverables(false);
-    setSnapshots(DEMO_SNAPSHOTS);
-    setSource(SCRIPTED);
+    setSnapshots([]);
+    setSource(null);
+    setAwaiting(null);
+    setBuildError(null);
+    setStartedAt(null);
+    forgetBuild();
   }, [clearTimers]);
 
   const scrubTo = useCallback((index: number) => {
@@ -203,6 +293,31 @@ export function RippleDashboard() {
     const board = params.get("board");
     if (board) {
       const kickoff = setTimeout(() => void showRealBoard(board), 300);
+      return () => clearTimeout(kickoff);
+    }
+
+    // ?request=<id> attaches to a build already in flight, so a refresh mid
+    // build reconnects instead of losing it.
+    const request = params.get("request");
+    if (request) {
+      const kickoff = setTimeout(() => {
+        setAwaiting("queued");
+        setRequestId(request);
+      }, 0);
+      return () => clearTimeout(kickoff);
+    }
+
+    // Nothing asked for in the URL: pick up the last build started from this
+    // browser. If it finished while the page was closed, the poller sees
+    // "done" on its first tick and renders the board straight away.
+    const remembered = recallBuild();
+    if (remembered) {
+      const kickoff = setTimeout(() => {
+        setPrompt(remembered.prompt);
+        setAwaiting("queued");
+        setStartedAt(remembered.at);
+        setRequestId(remembered.id);
+      }, 0);
       return () => clearTimeout(kickoff);
     }
 
@@ -312,26 +427,47 @@ export function RippleDashboard() {
                 progress={progress}
                 totalSteps={snapshots.length}
               />
-              {/* Say plainly which of the two the viewer is looking at. */}
-              <div className="mt-2.5 text-[11px]">
-                <span
-                  className={source.kind === "real" ? "text-good" : "text-dim"}
-                >
-                  {source.kind === "real" ? "● " : "○ "}
-                </span>
-                <span className={source.kind === "real" ? "text-ink" : "text-dim"}>
-                  {source.label}
-                </span>
-              </div>
+              {source ? (
+                <div className="mt-2.5 text-[11px]">
+                  <span className="text-good">● </span>
+                  <span className="text-dim">{source.label}</span>
+                </div>
+              ) : null}
             </div>
           ) : (
-            <div className="pointer-events-none absolute left-6 top-5 max-w-[20rem]">
-              <div className="text-[20px] font-medium leading-tight text-dim">
-                Idle
+            <div className="pointer-events-none absolute left-6 top-5 max-w-[22rem]">
+              <div
+                className={`text-[20px] font-medium leading-tight ${
+                  awaiting ? "text-accent" : buildError ? "text-bad" : "text-dim"
+                }`}
+              >
+                {awaiting === "submitting"
+                  ? "Sending specification"
+                  : awaiting === "queued"
+                    ? "Queued for the worker"
+                    : awaiting === "running"
+                      ? "Designing on the worker"
+                      : buildError
+                        ? "Build not started"
+                        : "Idle"}
               </div>
               <div className="mt-1.5 text-[12px] text-dim">
-                Describe a board to begin synthesis.
+                {awaiting
+                  ? "Ripple is designing this board now. It renders here when the worker answers."
+                  : buildError
+                    ? buildError
+                    : "Describe a board to begin synthesis."}
               </div>
+              {awaiting ? (
+                <>
+                  <div className="mt-2 font-mono text-[11px] text-faint [font-variant-numeric:tabular-nums]">
+                    {elapsed}s elapsed · typical build 15–35s
+                  </div>
+                  <div className="mt-3 h-px w-40 bg-hair">
+                    <div className="breathe h-px w-full bg-accent" />
+                  </div>
+                </>
+              ) : null}
             </div>
           )}
 
@@ -370,7 +506,7 @@ export function RippleDashboard() {
 
           {showDeliverables ? (
             <DeliverablesPanel
-              boardId={DELIVERABLES_BOARD_ID}
+              boardId={realBoardId ?? DELIVERABLES_BOARD_ID}
               onClose={() => setShowDeliverables(false)}
             />
           ) : null}
@@ -392,12 +528,21 @@ export function RippleDashboard() {
               onBuild={build}
               onReset={reset}
               isRunning={isRunning}
+              building={awaiting !== null || isRunning}
               hasRun={revealed > 0}
             />
             <RealBuildStatus
               requestId={requestId}
               note={requestNote}
               onBoard={(id) => void showRealBoard(id)}
+              onStatus={(st) =>
+                setAwaiting((prev) => (prev === null ? null : st))
+              }
+              onFailed={(error) => {
+                setAwaiting(null);
+                setStartedAt(null);
+                setBuildError(error);
+              }}
             />
           </div>
 
