@@ -206,6 +206,13 @@ export function HarnessDashboard({ sessionBoardId = null }: { sessionBoardId?: s
           </section>
 
           <section>
+            <Head title="Harness evolution" note="the meta-agent's proposals, kept and rejected on purpose" />
+            <div className="mt-2.5">
+              <HarnessEvolution versions={versions} />
+            </div>
+          </section>
+
+          <section>
             <Head title="Design loop" note="live stage" />
             <div className="mt-2.5">
               <DesignLoop
@@ -237,20 +244,13 @@ export function HarnessDashboard({ sessionBoardId = null }: { sessionBoardId?: s
             </div>
           </section>
 
-          <section>
+          <section className="pb-8">
             <Head
               title="Harness configuration"
               note={versionForBoard ? `v${String(versionForBoard.version).padStart(2, "0")}` : undefined}
             />
             <div className="mt-2.5">
               <HarnessVersionView version={versionForBoard} />
-            </div>
-          </section>
-
-          <section className="pb-8">
-            <Head title="Harness evolution" note="rejections kept on purpose" />
-            <div className="mt-2.5">
-              <HarnessEvolution versions={versions} />
             </div>
           </section>
         </div>
