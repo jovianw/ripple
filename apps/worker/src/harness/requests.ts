@@ -54,38 +54,59 @@ async function runOne(req: SpecRequest & { _id: NonNullable<SpecRequest["_id"]> 
 }
 
 /**
- * Serves spec requests until `signal` aborts: recovers interrupted ones, drains the queue one at a time (model budget),
- * then waits on a change stream for new inserts (with a slow poll as backup).
+ * Serves spec requests until `signal` aborts: recovers interrupted ones, then runs up to `concurrency` requests
+ * at once (each a separate board, so different users' prompts progress in parallel), waiting on a change stream
+ * for new inserts (with a slow poll as backup) whenever there's spare capacity and nothing queued.
+ *
+ * `concurrency` lanes share one `workerId`/pid/host for claim bookkeeping — that's fine: `claimed_pid`/`claimed_host`
+ * exist to tell "this process is alive" from "this process died," not to tell lanes apart, and each lane's writes
+ * are scoped to its own request `_id` (see `runOne`), so lanes never contend with each other.
  */
-export async function serveRequests(handler: RequestHandler, opts: { workerId?: string; log?: (m: string) => void; signal?: AbortSignal } = {}) {
+export async function serveRequests(
+  handler: RequestHandler,
+  opts: { workerId?: string; log?: (m: string) => void; signal?: AbortSignal; concurrency?: number } = {},
+) {
   const workerId = opts.workerId ?? defaultWorkerId();
   const log = opts.log ?? (() => {});
+  const concurrency = Math.max(1, opts.concurrency ?? 1);
   const recovered = await recoverRequests(workerId);
   if (recovered) log(`recovered ${recovered} interrupted request(s)`);
 
-  let wake: () => void = () => {};
+  // Every idle lane registers a resolver here; a change-stream insert (or abort) wakes all of them at once, not
+  // just whichever lane happened to register last (a single shared `wake` variable would starve every other lane).
+  let waiters: (() => void)[] = [];
+  const wakeAll = () => {
+    const pending = waiters;
+    waiters = [];
+    for (const resolve of pending) resolve();
+  };
   const stream = col.requests.watch([{ $match: { operationType: "insert" } }]);
-  stream.on("change", () => wake());
+  stream.on("change", wakeAll);
   stream.on("error", (e) => log(`change stream error (falling back to polling): ${e.message}`));
-  opts.signal?.addEventListener("abort", () => wake());
+  opts.signal?.addEventListener("abort", wakeAll);
 
-  try {
+  const lane = async (id: number) => {
     while (!opts.signal?.aborted) {
       const req = await claimRequest(workerId);
       if (!req) {
-        await Promise.race([new Promise<void>((r) => (wake = r)), sleep(POLL_MS)]);
+        await Promise.race([new Promise<void>((r) => waiters.push(r)), sleep(POLL_MS)]);
         await recoverRequests(workerId);
         continue;
       }
       const what = req.spec_id ?? `"${(req.text ?? "").slice(0, 60)}"`;
-      log(`request ${req._id}: ${what}`);
+      const tag = concurrency > 1 ? `[lane ${id}] ` : "";
+      log(`${tag}request ${req._id}: ${what}`);
       try {
         const passed = await runOne(req as SpecRequest & { _id: NonNullable<SpecRequest["_id"]> }, handler, workerId);
-        log(`request ${req._id}: ${passed ? "passed" : "done, did not pass"}`);
+        log(`${tag}request ${req._id}: ${passed ? "passed" : "done, did not pass"}`);
       } catch (err) {
-        log(`request ${req._id}: failed: ${err instanceof Error ? err.message : err}`);
+        log(`${tag}request ${req._id}: failed: ${err instanceof Error ? err.message : err}`);
       }
     }
+  };
+
+  try {
+    await Promise.all(Array.from({ length: concurrency }, (_, i) => lane(i)));
   } finally {
     await stream.close();
   }
