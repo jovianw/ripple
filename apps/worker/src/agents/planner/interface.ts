@@ -27,12 +27,15 @@ export function checkInterface(plan: SubcircuitPayload, circuitJson: El[]): stri
   }
   for (const [mpn] of plannedChips) if (!usedChips.has(mpn)) problems.push(`planned ${mpn} is missing`)
 
-  // Headers with exactly the planned labels.
+  // Headers carrying the planned labels. Order doesn't matter: the hidden checks find header pins by label.
   const headerPorts = (c: El) => circuitJson.filter((e) => e.type === "source_port" && e.source_component_id === c.source_component_id)
   const headerLabels = comps.filter((c) => c.ftype === "simple_pin_header").map((c) =>
-    headerPorts(c).map((p) => (p.port_hints ?? []).find((h: string) => !/^(pin)?\d+$/.test(h)) ?? p.name).join(","))
+    headerPorts(c).map((p) => String((p.port_hints ?? []).find((h: string) => !/^(pin)?\d+$/.test(h)) ?? p.name).toUpperCase()).sort().join(","))
   for (const h of plan.headers) {
-    if (!headerLabels.includes(h.labels.join(","))) problems.push(`header (${h.labels.join(", ")}) is missing or its labels differ`)
+    const want = h.labels.map((l) => l.toUpperCase()).sort().join(",")
+    if (!headerLabels.includes(want)) {
+      problems.push(`header (${h.labels.join(", ")}) is missing or its labels differ (headers found: ${headerLabels.length ? headerLabels.map((l) => `(${l})`).join(" ") : "none"})`)
+    }
   }
   return problems
 }

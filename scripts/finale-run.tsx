@@ -6,10 +6,13 @@
 //                                       lessons retrieved per subcircuit; models chosen by the current config
 //   npm run finale -- --reset [--stub]  delete this board's queue items, runs and boards first, then run
 //   npm run finale -- --clean [--stub]  only delete this board from Atlas (e.g. before recording), don't run
-//   options: --board <id> (default finale-dry / finale-live), --spec <id> (default finale)
+//   options: --board <id> (default finale-dry-<machine> / finale-live-<machine>), --spec <id> (default finale), --repairs <n> (default 2)
+//   STUB_BREAK=sensors  the stand-in builds that block with its decoupling caps unwired, then fixes it when the
+//                       repair loop sends the assembled board's failures back (tests the loop with no model calls)
 // Kill it mid-run (Ctrl+C) and run the same command again: it resumes from the queue.
 // When the board passes, its deliverables are written to out/<board>/ plus out/<board>-deliverables.zip and -gerbers.zip.
 import { readFileSync } from "node:fs"
+import { hostname } from "node:os"
 import { setTimeout as sleep } from "node:timers/promises"
 import finaleSpec from "../specs/finale.json" with { type: "json" }
 import specs from "../specs/specs.json" with { type: "json" }
@@ -18,9 +21,7 @@ import { client, col, connect } from "../apps/worker/src/db.ts"
 import { currentConfig } from "../apps/worker/src/harness/config.ts"
 import { runPlannedBoard, type PlannedBoardDeps } from "../apps/worker/src/pipeline/planned-board.ts"
 import { evaluateCircuitSource } from "../apps/worker/src/tools/evaluate.ts"
-import { runCoder } from "../apps/worker/src/agents/coder.ts"
-import { createComplete } from "../apps/worker/src/tools/router.ts"
-import { retrieveLessons } from "../apps/worker/src/harness/memory.ts"
+import { liveDeps } from "../apps/worker/src/pipeline/live-deps.ts"
 import { buildDeliverables, writeDeliverables } from "../apps/worker/src/export/deliverables.ts"
 import type { PlannerOutput } from "../apps/worker/src/agents/planner/index.ts"
 
@@ -29,7 +30,8 @@ const stub = process.argv.includes("--stub")
 const specId = arg("--spec") ?? "finale"
 const spec = [...specs, finaleSpec].find((s) => s._id === specId)
 if (!spec) throw new Error(`unknown spec ${specId}`)
-const boardId = arg("--board") ?? `${specId}-${stub ? "dry" : "live"}`
+// Default board name is per machine, so teammates' runs never share (and split) a board's queue.
+const boardId = arg("--board") ?? `${specId}-${stub ? "dry" : "live"}-${hostname().split(".")[0].toLowerCase().replace(/[^a-z0-9]+/g, "-")}`
 const STEP_MS = Number(process.env.STUB_STEP_MS ?? 2000)
 const log = (m: string) => console.log(`${new Date().toISOString().slice(11, 19)} ${m}`)
 
@@ -80,19 +82,22 @@ const deps: PlannedBoardDeps = stub
       async coder(input) {
         await sleep(STEP_MS) // time to Ctrl+C mid-run
         const key = Object.keys(REF).find((k) => input.specText.includes(`prefix ${k.slice(0, 4).toUpperCase()}_`)) ?? "power"
-        const source = `export default () => (\n  <board>\n${referenceGroup(REF[key])}\n  </board>\n)\n`
+        let group = referenceGroup(REF[key])
+        const repairing = input.specText.includes("The assembled board failed these checks")
+        if (process.env.STUB_BREAK === key && !repairing) {
+          // Deliberately unwire this block's decoupling caps so the hidden checks fail and the repair loop has work.
+          const caps = [...group.matchAll(/<capacitor name="(\w+)"[^>]*capacitance="100nF"/g)].map((m) => m[1])
+          group = group.split("\n").filter((l) => !caps.some((c) => l.includes(`.${c} >`))).join("\n")
+          log(`stand-in: built ${key} with ${caps.join(", ")} unwired (STUB_BREAK)`)
+        }
+        const source = `export default () => (\n  <board>\n${group}\n  </board>\n)\n`
         return { source, circuitJson: (await evaluateCircuitSource(source)).circuitJson as never }
       },
       log,
     }
-  : {
-      planner: { complete: createComplete("planner", config) as PlannedBoardDeps["planner"]["complete"] },
-      coder: (input) => runCoder(input) as never,
-      lessons: (query) => retrieveLessons(query, config.context) as never,
-      log,
-    }
+  : liveDeps(spec, boardId, config, log)
 
-log(`${boardId}: spec ${specId}, harness v${config.version}, ${stub ? "stand-in planner + coder" : `live: planner ${config.routing.planner}, coder ${config.routing.coder}`}`)
+deps.maxRepairRounds = Number(arg("--repairs") ?? 2)
 const { progress, final } = await runPlannedBoard(boardId, spec, config, deps)
 log(`queue: ${progress.done}/${progress.total} done, ${progress.failed} failed, ${progress.pending} pending`)
 for (const i of progress.items) if (i.status !== "done") log(`  ${i.key} ${i.status}: ${i.error ?? ""}`)

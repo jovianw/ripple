@@ -61,7 +61,8 @@ Check tscircuit works: `npm run smoke` renders `examples/led-board.tsx` through 
 | `npm run lessons` | List lessons; `-- retire <id> "<why>"` stops using one (kept in Atlas), `-- restore <id>` brings it back |
 | `npm run finale -- --stub [--reset]` | Finale through the durable queue with stand-in planner + coder (no model calls). Ctrl+C mid-run, rerun: it resumes. Writes deliverables to `out/<board>/` and zips |
 | `npm run finale -- --stub --clean` | Delete the finale board from Atlas without running (do this before recording) |
-| `npm run finale` | Same with the real planner and coder (cheap model) |
+| `npm run finale` | Same with the real planner, coder and critic. A failed assembly is blamed per subcircuit and repaired (`--repairs <n>`, default 2) |
+| `STUB_BREAK=sensors npm run finale -- --stub --reset` | Tests the repair loop with no model calls: the stand-in unwires that block, the loop repairs it |
 | `npm run green` | Checks Atlas writer, read-only reader, Voyage, OpenRouter + LangSmith |
 | `npm run setup:indexes` / `npm run seed:config` | Atlas collections and indexes / harness config v0 (both done; safe to re-run) |
 | `npm run queue:demo` | Work-queue kill-and-resume demo (Ctrl+C mid-run, rerun, it resumes) |
