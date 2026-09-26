@@ -14,6 +14,16 @@ import {
   type SubcircuitDoc,
 } from "@/lib/live";
 
+interface BoardSummary {
+  board_id: string;
+  spec_id?: string;
+  kind?: string;
+  harness_version?: number;
+  passed?: boolean;
+  failures?: unknown[];
+  created_at?: string;
+}
+
 const POLL_MS = 2000;
 
 const VERDICT_INK: Record<string, string> = {
@@ -50,6 +60,7 @@ export function LiveConsole() {
   const [lessons, setLessons] = useState<LessonDoc[]>([]);
   const [subcircuits, setSubcircuits] = useState<SubcircuitDoc[]>([]);
   const [queue, setQueue] = useState<QueueItemDoc[]>([]);
+  const [boards, setBoards] = useState<BoardSummary[]>([]);
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
 
@@ -60,12 +71,13 @@ export function LiveConsole() {
       return r.json().catch(() => null);
     };
 
-    const [h, r, v, m, q] = await Promise.all([
+    const [h, r, v, m, q, b] = await Promise.all([
       json("/api/health"),
       json("/api/runs?limit=40"),
       json("/api/harness"),
       json("/api/memory"),
       json("/api/queue"),
+      json("/api/boards"),
     ]);
 
     if (h) setHealth(h);
@@ -74,6 +86,7 @@ export function LiveConsole() {
     if (m?.lessons) setLessons(m.lessons);
     if (m?.subcircuits) setSubcircuits(m.subcircuits);
     if (q?.items) setQueue(q.items);
+    if (b?.boards) setBoards(b.boards);
   }, []);
 
   // Poll rather than stream: serverless functions can't hold a change stream
@@ -209,6 +222,41 @@ export function LiveConsole() {
               );
             })}
           </ol>
+        )}
+      </Section>
+
+      <Section
+        title="Boards"
+        note={boards.length ? "click to open the 3D view" : undefined}
+      >
+        {boards.length === 0 ? (
+          <p className="text-[12px] text-ghost">No boards stored yet.</p>
+        ) : (
+          <ul className="space-y-1">
+            {boards.slice(0, 10).map((b) => (
+              <li key={b.board_id + String(b.created_at)}>
+                <Link
+                  href={`/boards/${b.board_id}`}
+                  className="group flex items-baseline gap-3 text-[12px]"
+                >
+                  <span
+                    className={`w-14 shrink-0 ${b.passed ? "text-good" : "text-bad"}`}
+                  >
+                    {b.passed ? "passed" : "failed"}
+                  </span>
+                  <span className="w-20 shrink-0 font-mono text-ghost">
+                    {b.board_id.slice(0, 8)}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-dim group-hover:text-accent">
+                    {b.spec_id ?? "—"}
+                  </span>
+                  <span className="shrink-0 font-mono text-[11px] text-ghost">
+                    {ago(b.created_at)}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
         )}
       </Section>
 

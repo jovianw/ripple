@@ -125,3 +125,22 @@ routes return 503 rather than crashing the page.
 
 `/` does not touch Atlas: it stays on scripted snapshots so the demo cannot be
 broken by the database.
+
+### Real boards
+
+`lib/circuitJson.ts` converts tscircuit Circuit JSON into `PCBState`, so the
+same scene draws both the scripted demo and real boards from Atlas.
+
+- `GET /api/boards` — board index, without `circuit_json`
+- `GET /api/boards/:id` — one board, already adapted (accepts a `board_id` or a
+  `spec_id`, newest first)
+- `/boards/:id` — that board in the 3D view, with its hidden-check failures
+
+The conversion runs server-side: a small board is ~100 Circuit JSON elements and
+most of them (schematic, silkscreen, solder paste) are never drawn, so adapting
+before serialising keeps them off the wire.
+
+Two things the adapter gets right that are easy to get wrong:
+`pcb_board.center` is generally **not** the origin, so all geometry is
+translated by it; and `pcb_component.width/height` is the bounding box **after**
+rotation, so applying the rotation again double-rotates the part.
