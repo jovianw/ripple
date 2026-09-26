@@ -12,7 +12,7 @@ Stay inside your person's area. To change another area, ask its owner.
 
 | Owner | Area | Paths |
 |---|---|---|
-| Marcos | Specs, hidden checker, critic, planner, assembler, parts whitelist, finale board | `checks/`, `specs/`, `apps/worker/src/agents/{critic,planner}*`, assembler |
+| Marcos | Specs, hidden checker, critic, planner, assembler, parts whitelist, finale board | `checks/`, `specs/`, `parts/`, `apps/worker/src/agents/{critic,planner}*`, assembler |
 | Jovian | Atlas (`db.ts`), config versioning and gate, memory and retrieval (Voyage), work queue, change streams | `apps/worker/src/db.ts`, `apps/worker/src/harness/`, `scripts/` (index setup, seed) |
 | Arjun | tscircuit wrappers (compile, autoroute, DRC, metrics), model router (OpenRouter), coder, MCP access, meta-agent, ablation | `apps/worker/src/tools/`, `apps/worker/src/agents/{coder,meta}*`, `scripts/` (ablation) |
 | Jack | Next.js UI, PCB preview, Vercel deploys, README, video and submission | `apps/web/` |
@@ -23,7 +23,8 @@ Per-person task list and timings: DESIGN.md §6.
 ## Rules
 
 - **Contracts are frozen.** `HarnessConfig` and `RunResult` in `packages/types` change only with team agreement.
-- **Hidden checks stay hidden.** Nothing in `checks/` may reach Board Forge's runtime agents: no imports into prompts, retrieval, Atlas, or MCP. Only Marcos edits `checks/`.
+- **Hidden checks stay hidden.** Nothing in `checks/` may reach Board Forge's runtime agents: no imports into prompts, retrieval, Atlas, or MCP. That includes `checks/requirements.md` (what each spec is graded on) and `checks/reference/` (solution boards). Only Marcos edits `checks/`.
+- **Parts come from the whitelist.** The coder may only use parts in `parts/whitelist.json` (agent-visible). Add a part only if `npm run verify:parts` passes.
 - **One writer.** Only the worker writes to Atlas. The web app and MCP server use `MONGODB_URI_READER`.
 - **No secrets in git.** Keys live in `.env` (gitignored). Never commit `.env`, `.mcp.json`, or API keys; share keys privately.
 - **Watch OpenRouter spend.** Shared budget is $100 for the day. Log cost per call; use cheap models while developing.
@@ -41,3 +42,14 @@ Per-person task list and timings: DESIGN.md §6.
 Node 22.13+. `cp .env.example .env`, fill in keys, `npm install`, `npm run typecheck`.
 
 Check tscircuit works: `npm run smoke` renders `examples/led-board.tsx` through the autorouter and DRC, prints trace/via/error counts, and writes `out/led-board.circuit.json` and `out/led-board.pcb.svg`. Expect 0 errors. The `tsci` CLI needs Bun; the smoke script uses the Node API instead.
+
+| Command | Does |
+|---|---|
+| `npm run smoke` | LED test board through autorouter + DRC |
+| `npm run smoke t03` | Reference USB-C → 3.3V board (hidden) through autorouter + DRC |
+| `npm run verify:parts` | Renders every whitelisted part |
+
+## Specs and parts
+
+- `specs/specs.json`: 8 training (`t*`) and 4 held-out (`h*`) specs. Held-out specs are for the ablation only.
+- `parts/whitelist.json`: 16 parts with footprints, pin labels, power/ground pin attributes, and datasheet notes. Spread `props` into the element: `<chip name="U1" {...part.props} />`.

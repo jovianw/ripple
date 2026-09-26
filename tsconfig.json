@@ -15,10 +15,12 @@
     "lib": [
       "ESNext",
       "DOM"
-    ]
+    ],
+    "resolveJsonModule": true
   },
   "include": [
     "scripts",
-    "examples"
+    "examples",
+    "checks/reference"
   ]
 }

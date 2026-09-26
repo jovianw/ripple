@@ -1,0 +1,252 @@
+{
+  "version": "v1",
+  "tscircuit": "0.0.2646",
+  "parts": [
+    {
+      "id": "resistor_0603",
+      "element": "resistor",
+      "props": {
+        "footprint": "0603"
+      },
+      "notes": "Set resistance, e.g. \"1k\". Pins: pin1, pin2."
+    },
+    {
+      "id": "resistor_0402",
+      "element": "resistor",
+      "props": {
+        "footprint": "0402"
+      },
+      "notes": "Set resistance. Pins: pin1, pin2."
+    },
+    {
+      "id": "capacitor_0603",
+      "element": "capacitor",
+      "props": {
+        "footprint": "0603"
+      },
+      "notes": "Set capacitance, e.g. \"100nF\" or \"1uF\". Pins: pin1, pin2."
+    },
+    {
+      "id": "capacitor_0805",
+      "element": "capacitor",
+      "props": {
+        "footprint": "0805"
+      },
+      "notes": "Use for 10uF bulk caps. Pins: pin1, pin2."
+    },
+    {
+      "id": "led_0603",
+      "element": "led",
+      "props": {
+        "footprint": "0603"
+      },
+      "notes": "Set color (red, green, blue). Pins: anode, cathode. Always needs a series resistor. Vf ~2.0V red/green, ~3.0V blue."
+    },
+    {
+      "id": "pushbutton_smd",
+      "element": "pushbutton",
+      "props": {
+        "footprint": "pushbutton"
+      },
+      "notes": "4-pin tactile switch. pin1/pin2 are one side, pin3/pin4 the other."
+    },
+    {
+      "id": "header_2",
+      "element": "pinheader",
+      "props": {
+        "pinCount": 2,
+        "footprint": "pinrow2"
+      },
+      "notes": "Set pinLabels, e.g. [\"VCC\",\"GND\"]."
+    },
+    {
+      "id": "header_3",
+      "element": "pinheader",
+      "props": {
+        "pinCount": 3,
+        "footprint": "pinrow3"
+      },
+      "notes": "Set pinLabels."
+    },
+    {
+      "id": "header_4",
+      "element": "pinheader",
+      "props": {
+        "pinCount": 4,
+        "footprint": "pinrow4"
+      },
+      "notes": "Set pinLabels."
+    },
+    {
+      "id": "header_6",
+      "element": "pinheader",
+      "props": {
+        "pinCount": 6,
+        "footprint": "pinrow6"
+      },
+      "notes": "Set pinLabels. Used for the ATtiny85 ISP header."
+    },
+    {
+      "id": "usb_c_receptacle",
+      "element": "connector",
+      "props": {
+        "standard": "usb_c",
+        "footprint": "usbcmidmount",
+        "pinLabels": {
+          "pin1": "SHIELD1",
+          "pin2": "SHIELD2",
+          "pin3": "SHIELD3",
+          "pin4": "SHIELD4",
+          "pin5": "GND1",
+          "pin6": "VBUS1",
+          "pin7": "SBU2",
+          "pin8": "CC1",
+          "pin9": "DN2",
+          "pin10": "DP1",
+          "pin11": "DN1",
+          "pin12": "DP2",
+          "pin13": "SBU1",
+          "pin14": "CC2",
+          "pin15": "VBUS2",
+          "pin16": "GND2"
+        }
+      },
+      "notes": "USB 2.0 Type-C receptacle, 16-pin mid-mount. As a power sink: tie VBUS1+VBUS2 to 5V, GND1+GND2 to GND, and pull CC1 and CC2 to GND with separate 5.1k resistors. Pad map follows the common 16-pin layout; confirm against the chosen part's datasheet before ordering."
+    },
+    {
+      "id": "ldo_3v3_ap2112k",
+      "element": "chip",
+      "props": {
+        "manufacturerPartNumber": "AP2112K-3.3",
+        "footprint": "sot23_5",
+        "pinLabels": {
+          "pin1": "VIN",
+          "pin2": "GND",
+          "pin3": "EN",
+          "pin4": "NC",
+          "pin5": "VOUT"
+        },
+        "pinAttributes": {
+          "VIN": {
+            "requiresPower": true
+          },
+          "GND": {
+            "requiresGround": true
+          },
+          "VOUT": {
+            "providesPower": true,
+            "providesVoltage": "3.3V"
+          },
+          "NC": {
+            "doNotConnect": true
+          }
+        }
+      },
+      "notes": "3.3V 600mA LDO, 2.5-6V in. 1uF on VIN and 1uF on VOUT, close to the pins. Tie EN to VIN to keep it on."
+    },
+    {
+      "id": "temp_sensor_lm75",
+      "element": "chip",
+      "props": {
+        "manufacturerPartNumber": "LM75B",
+        "footprint": "soic8",
+        "pinLabels": {
+          "pin1": "SDA",
+          "pin2": "SCL",
+          "pin3": "OS",
+          "pin4": "GND",
+          "pin5": "A2",
+          "pin6": "A1",
+          "pin7": "A0",
+          "pin8": "VCC"
+        },
+        "pinAttributes": {
+          "VCC": {
+            "requiresPower": true
+          },
+          "GND": {
+            "requiresGround": true
+          }
+        }
+      },
+      "notes": "I2C temperature sensor, 2.8-5.5V. Address 0x48 + A2..A0; tie each address pin to GND or VCC. 100nF on VCC. OS is an open-drain output; may be left unconnected."
+    },
+    {
+      "id": "humidity_sensor_sht40",
+      "element": "chip",
+      "props": {
+        "manufacturerPartNumber": "SHT40-AD1B",
+        "footprint": "dfn4_w1.5mm_h1.5mm_p0.8mm_pl0.5mm_pw0.3mm",
+        "pinLabels": {
+          "pin1": "SDA",
+          "pin2": "SCL",
+          "pin3": "VDD",
+          "pin4": "VSS"
+        },
+        "pinAttributes": {
+          "VDD": {
+            "requiresPower": true
+          },
+          "VSS": {
+            "requiresGround": true
+          }
+        }
+      },
+      "notes": "I2C humidity and temperature sensor, 1.08-3.6V (not 5V tolerant). Fixed address 0x44. 100nF on VDD."
+    },
+    {
+      "id": "eeprom_24lc256",
+      "element": "chip",
+      "props": {
+        "manufacturerPartNumber": "24LC256",
+        "footprint": "soic8",
+        "pinLabels": {
+          "pin1": "A0",
+          "pin2": "A1",
+          "pin3": "A2",
+          "pin4": "VSS",
+          "pin5": "SDA",
+          "pin6": "SCL",
+          "pin7": "WP",
+          "pin8": "VCC"
+        },
+        "pinAttributes": {
+          "VCC": {
+            "requiresPower": true
+          },
+          "VSS": {
+            "requiresGround": true
+          }
+        }
+      },
+      "notes": "256Kbit I2C EEPROM, 2.5-5.5V. Address 0x50 + A2..A0; tie each address pin to a rail. Tie WP to GND to allow writes. 100nF on VCC."
+    },
+    {
+      "id": "mcu_attiny85",
+      "element": "chip",
+      "props": {
+        "manufacturerPartNumber": "ATtiny85-20SU",
+        "footprint": "soic8",
+        "pinLabels": {
+          "pin1": "PB5_RESET",
+          "pin2": "PB3",
+          "pin3": "PB4",
+          "pin4": "GND",
+          "pin5": "PB0_MOSI_SDA",
+          "pin6": "PB1_MISO",
+          "pin7": "PB2_SCK_SCL",
+          "pin8": "VCC"
+        },
+        "pinAttributes": {
+          "VCC": {
+            "requiresPower": true
+          },
+          "GND": {
+            "requiresGround": true
+          }
+        }
+      },
+      "notes": "8-bit MCU, 2.7-5.5V. 100nF on VCC. 10k pull-up on RESET. ISP header order: 1 MISO, 2 VCC, 3 SCK, 4 MOSI, 5 RESET, 6 GND. Hardware I2C (USI): SDA = PB0, SCL = PB2."
+    }
+  ]
+}
