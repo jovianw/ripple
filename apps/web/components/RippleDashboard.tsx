@@ -69,8 +69,8 @@ function recallBuild(): ActiveBuild | null {
   }
 }
 
-// Which board's deliverables the finished run corresponds to. Becomes the real
-// board id once runs are persisted; the panel takes it as a prop either way.
+// The example bundle (public/deliverables/t04) the panel shows until a real
+// build has loaded; after that it shows the worker's views for that board.
 const DELIVERABLES_BOARD_ID = "t04";
 
 /** One canonical status for the whole system; details live elsewhere. */
@@ -103,6 +103,8 @@ export function RippleDashboard() {
   const [isRunning, setIsRunning] = useState(false);
   const [selected, setSelected] = useState<PCBComponent | null>(null);
   const [showDeliverables, setShowDeliverables] = useState(false);
+  /** The board the worker just built, once it's loaded; the deliverables panel shows its views. */
+  const [realBoardId, setRealBoardId] = useState<string | null>(null);
   const [snapshots, setSnapshots] = useState<BuildSnapshot[]>([]);
   // Non-null while a real build is in flight: what the worker is doing now.
   const [awaiting, setAwaiting] = useState<
@@ -235,6 +237,7 @@ export function RippleDashboard() {
       setStartedAt(null);
       setBuildError(null);
       setSource({ label: `real build · ${boardId.slice(0, 8)}` });
+      setRealBoardId(boardId);
       play(
         buildSnapshotsFromBoard({
           spec: { _id: payload.board.spec_id ?? "free text", text: prompt },
@@ -248,6 +251,7 @@ export function RippleDashboard() {
 
   const reset = useCallback(() => {
     clearTimers();
+    setRealBoardId(null);
     liveRef.current = true;
     setIsLive(true);
     setIsRunning(false);
@@ -502,7 +506,7 @@ export function RippleDashboard() {
 
           {showDeliverables ? (
             <DeliverablesPanel
-              boardId={DELIVERABLES_BOARD_ID}
+              boardId={realBoardId ?? DELIVERABLES_BOARD_ID}
               onClose={() => setShowDeliverables(false)}
             />
           ) : null}

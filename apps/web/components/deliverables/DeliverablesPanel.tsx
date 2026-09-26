@@ -114,20 +114,27 @@ export function DeliverablesPanel({
         </div>
 
         <div className="flex items-center gap-5">
-          <a
-            href={zipUrl(boardId, "gerbers")}
-            className="text-[13px] text-accent hover:text-ink"
-            download
-          >
-            Download Gerbers →
-          </a>
-          <a
-            href={zipUrl(boardId)}
-            className="text-[13px] text-dim hover:text-ink"
-            download
-          >
-            Download all →
-          </a>
+          {manifest?.live ? (
+            // Built by the worker for this board: views only. Gerbers, KiCad and 3D come from `npm run export`.
+            <span className="text-[12px] text-faint">Views for this build · full package via export</span>
+          ) : (
+            <>
+              <a
+                href={zipUrl(boardId, "gerbers")}
+                className="text-[13px] text-accent hover:text-ink"
+                download
+              >
+                Download Gerbers →
+              </a>
+              <a
+                href={zipUrl(boardId)}
+                className="text-[13px] text-dim hover:text-ink"
+                download
+              >
+                Download all →
+              </a>
+            </>
+          )}
           <button
             type="button"
             onClick={onClose}
