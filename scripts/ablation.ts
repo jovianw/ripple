@@ -21,7 +21,7 @@ interface RunBoardResult {
 // moduleResolution/paths for the full story). Load them dynamically, like
 // green-check.ts does for db.ts and coder-loop.ts does for checks/index.ts.
 const { runBatch, findSpec } = (await import(new URL("../apps/worker/src/agents/coder-loop.ts", import.meta.url).href)) as {
-  runBatch: (specIds: string[], config: HarnessConfig, opts?: { writeMemory?: boolean }) => Promise<RunBoardResult[]>;
+  runBatch: (specIds: string[], config: HarnessConfig, opts?: { writeMemory?: boolean; useMemory?: boolean }) => Promise<RunBoardResult[]>;
   findSpec: (id: string) => { text: string };
 };
 const { evaluateCircuitSource } = (await import(new URL("../apps/worker/src/tools/evaluate.ts", import.meta.url).href)) as {
@@ -105,12 +105,14 @@ async function main() {
   console.log(`Held-out specs: ${HELD_OUT.join(", ")}`);
 
   const vN = await currentConfig();
+  if (vN.version === 0) console.warn("note: no evolved config has been kept yet, so the vN row runs v0's config (with learned memory)");
 
   console.log("\nRunning: bare model, no harness...");
   const bare = await runBareBatch(HELD_OUT, vN);
 
-  console.log("Running: harness v0...");
-  const v0Results = await runBatch(HELD_OUT, BASELINE, { writeMemory: false });
+  // v0 is "loop + checks": baseline config and no learned memory (no lessons, no library subcircuits).
+  console.log("Running: harness v0 (no memory)...");
+  const v0Results = await runBatch(HELD_OUT, BASELINE, { writeMemory: false, useMemory: false });
 
   console.log("Running: harness vN (evolved)...");
   const vNResults = await runBatch(HELD_OUT, vN, { writeMemory: false });
@@ -118,7 +120,7 @@ async function main() {
   const rows = [
     toRow("Bare model, no harness", bare),
     toRow(`Harness v0`, boardRowInput(v0Results)),
-    toRow(`Harness v${vN.version} (evolved)`, boardRowInput(vNResults)),
+    toRow(`Harness v${vN.version} (evolved config, library, lessons)`, boardRowInput(vNResults)),
   ];
 
   printTable(rows);

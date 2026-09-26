@@ -8,7 +8,7 @@ import type { BoardMetrics, HarnessConfig, RunResult, Spec } from "@ripple/types
 import { retrieveLessons, retrieveSubcircuits, addLesson, addSubcircuit, markLessonsHelped, markSubcircuitsReused } from "../harness/memory.js";
 import { col } from "../db.js";
 import { createComplete } from "../tools/router.js";
-import { runCoder, type CoderResult } from "./coder.js";
+import { runCoder, CoderCompileError, type CoderResult } from "./coder.js";
 import { runCritic, type CriticResult } from "./critic/index.js";
 import specs from "../../../../specs/specs.json" with { type: "json" };
 import finale from "../../../../specs/finale.json" with { type: "json" };
@@ -27,6 +27,8 @@ export interface RunBoardOptions {
   boardId?: string;
   /** Save the passing board to the library and credit retrieved memory. Turn off for ablation runs so held-out solutions never enter memory. Default true. */
   writeMemory?: boolean;
+  /** Retrieve lessons and library subcircuits. Turn off for the ablation's v0 row ("loop + checks", no learned memory). Default true. */
+  useMemory?: boolean;
 }
 
 export interface RunBoardResult {
@@ -34,7 +36,10 @@ export interface RunBoardResult {
   boardId: string;
   attempts: number;
   runResult: RunResult;
-  coderResult: CoderResult;
+  /** Undefined when no attempt compiled, or when the board errored before finishing (see runResult.failures). */
+  coderResult?: CoderResult;
+  /** Last generated source, including code that didn't compile. */
+  source?: string;
   criticResults: CriticResult[];
 }
 
@@ -59,47 +64,65 @@ function toBoardMetrics(m: CoderResult["metrics"]): BoardMetrics {
 }
 
 export async function runBoard(specId: string, config: HarnessConfig, opts: RunBoardOptions = {}): Promise<RunBoardResult> {
-  const { boardId = randomUUID(), writeMemory = true } = opts;
+  const { boardId = randomUUID(), writeMemory = true, useMemory = true } = opts;
   const spec = findSpec(specId);
   const checks = await loadChecks();
   const expected = checks.loadExpected(specId);
   const completeCritic = createComplete("critic", config);
 
-  const [lessons, subcircuits] = await Promise.all([
-    retrieveLessons(spec.text, config.context),
-    retrieveSubcircuits(spec.text, config.context),
-  ]);
+  const [lessons, subcircuits] = useMemory
+    ? await Promise.all([retrieveLessons(spec.text, config.context), retrieveSubcircuits(spec.text, config.context)])
+    : [[], []];
 
   let coderResult: CoderResult | undefined;
   let runResult: RunResult | undefined;
   let previousFailure: string | undefined;
   let previousFailures: RunResult["failures"] | undefined;
+  let source: string | undefined;
   const criticResults: CriticResult[] = [];
   let attempts = 0;
   const maxAttempts = Math.max(1, config.workflow.repair_budget);
 
   while (attempts < maxAttempts) {
     attempts++;
-    coderResult = await runCoder({
-      specText: spec.text,
-      config,
-      lessons,
-      subcircuits,
-      previousFailure: config.context.include_last_failure ? previousFailure : undefined,
-    });
-
-    const checked = await checks.runChecks(coderResult.circuitJson, expected, {
-      board_id: boardId,
-      harness_version: config.version,
-    });
-
-    runResult = {
-      ...checked,
-      metrics: toBoardMetrics(coderResult.metrics),
-      model: coderResult.model.tier,
-      tokens: coderResult.model.totalTokens,
-      cost_usd: coderResult.model.costUsd,
-    };
+    // Code that doesn't compile or render is a failed attempt, not a crash: record it and let the critic fix it.
+    try {
+      coderResult = await runCoder({
+        specText: spec.text,
+        config,
+        lessons,
+        subcircuits,
+        previousFailure: config.context.include_last_failure ? previousFailure : undefined,
+      });
+      source = coderResult.source;
+      const checked = await checks.runChecks(coderResult.circuitJson, expected, {
+        board_id: boardId,
+        harness_version: config.version,
+      });
+      runResult = {
+        ...checked,
+        metrics: toBoardMetrics(coderResult.metrics),
+        model: coderResult.model.tier,
+        tokens: coderResult.model.totalTokens,
+        cost_usd: coderResult.model.costUsd,
+      };
+    } catch (err) {
+      if (!(err instanceof CoderCompileError)) throw err;
+      coderResult = undefined;
+      source = err.source;
+      runResult = {
+        board_id: boardId,
+        harness_version: config.version,
+        stage: "compile",
+        passed: false,
+        failures: [{ check: "compile", detail: err.message }],
+        drc_errors: 0,
+        model: err.model.tier,
+        tokens: err.model.totalTokens,
+        cost_usd: err.model.costUsd,
+        ts: new Date().toISOString(),
+      };
+    }
 
     await col.runs.replaceOne({ _id: `${boardId}_${attempts}` }, runResult, { upsert: true });
 
@@ -113,7 +136,7 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
       const critic = await runCritic(
         {
           spec: { _id: spec._id, text: spec.text, split: spec.split },
-          code: coderResult.source,
+          code: source ?? "",
           result: runResult,
           previousFailures,
           lessons: lessons.map((l) => ({ _id: l._id, pattern: l.pattern, fix: l.fix })),
@@ -130,9 +153,9 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
     previousFailures = runResult.failures;
   }
 
-  if (!coderResult || !runResult) throw new Error(`runBoard(${specId}) produced no result`);
+  if (!runResult) throw new Error(`runBoard(${specId}) produced no result`);
 
-  if (runResult.passed && writeMemory) {
+  if (runResult.passed && coderResult && writeMemory) {
     await addSubcircuit({
       name: `board_${specId}`,
       description: spec.text,
@@ -143,7 +166,7 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
     await markSubcircuitsReused(subcircuits.map((s) => s._id));
   }
 
-  return { specId, boardId, attempts, runResult, coderResult, criticResults };
+  return { specId, boardId, attempts, runResult, coderResult, source, criticResults };
 }
 
 export interface RunBatchOptions extends RunBoardOptions {
@@ -161,7 +184,27 @@ export async function runBatch(specIds: string[], config: HarnessConfig, opts: R
     while (true) {
       const i = next++;
       if (i >= specIds.length) return;
-      results[i] = await runBoard(specIds[i], config, boardOpts);
+      // One board's error (rate limit, bad critic JSON...) must not throw away the rest of the batch.
+      try {
+        results[i] = await runBoard(specIds[i], config, boardOpts);
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        results[i] = {
+          specId: specIds[i],
+          boardId: boardOpts.boardId ?? "",
+          attempts: 0,
+          criticResults: [],
+          runResult: {
+            board_id: boardOpts.boardId ?? "",
+            harness_version: config.version,
+            stage: "error",
+            passed: false,
+            failures: [{ check: "error", detail: detail.slice(0, 500) }],
+            drc_errors: 0,
+            ts: new Date().toISOString(),
+          },
+        };
+      }
     }
   }
 

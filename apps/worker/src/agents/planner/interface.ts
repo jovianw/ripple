@@ -20,7 +20,8 @@ export function checkInterface(plan: SubcircuitPayload, circuitJson: El[]): stri
   }
   const usedChips = new Map<string, number>()
   for (const c of comps) if (c.manufacturer_part_number) usedChips.set(c.manufacturer_part_number, (usedChips.get(c.manufacturer_part_number) ?? 0) + 1)
-  for (const [mpn, n] of usedChips) {
+  // An empty parts list (whole-board fallback) means the plan didn't constrain parts.
+  if (plan.parts.length) for (const [mpn, n] of usedChips) {
     if (!plannedChips.has(mpn)) problems.push(`${mpn} is not in this subcircuit's plan`)
     else if (n > plannedChips.get(mpn)!) problems.push(`${n}x ${mpn} used, plan has ${plannedChips.get(mpn)}`)
   }
