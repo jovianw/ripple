@@ -194,11 +194,7 @@ export function HarnessDashboard({ sessionBoardId = null }: { sessionBoardId?: s
       <div className="grid min-h-0 flex-1 gap-8 border-t border-hair pt-5 lg:grid-cols-[minmax(0,1fr)_280px]">
         <div className="min-w-0 space-y-7">
           <section>
-            <CurrentExecution
-              latest={latest}
-              running={runningItem}
-              harnessVersion={latest?.harnessVersion ?? null}
-            />
+            <CurrentExecution latest={latest} running={runningItem} />
             <div className="mt-4">
               <RunTelemetry
                 tokens={totals.tokens}
