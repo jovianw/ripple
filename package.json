@@ -13,7 +13,8 @@
     "setup:indexes": "tsx --env-file-if-exists=.env scripts/setup-indexes.ts",
     "green": "tsx --env-file-if-exists=.env scripts/green-check.ts",
     "smoke": "tsx scripts/smoke-board.tsx",
-    "verify:parts": "tsx scripts/verify-parts.tsx"
+    "verify:parts": "tsx scripts/verify-parts.tsx",
+    "test:checks": "TSX_TSCONFIG_PATH=checks/tsconfig.json tsx --test checks/**/*.test.tsx"
   },
   "devDependencies": {
     "@tscircuit/checks": "0.0.208",
