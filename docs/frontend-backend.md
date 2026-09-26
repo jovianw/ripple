@@ -143,8 +143,8 @@ Always project out `embedding` (1024 numbers per doc).
 The prompt box inserts a request; the worker (`npm run worker`, running on the demo laptop) picks it up through an Atlas
 change stream, runs it, and writes the status back. Design state is still written only by the worker.
 
-**Connection:** a third user, `ripple_requester`, whose custom role allows only `insert` and `find` on
-`ripple.spec_requests`. Env var `MONGODB_URI_REQUESTS` (server-side only; set it in Vercel and `apps/web/.env.local`).
+**Connection:** a third user, `ripple_requester`, with the built-in `readWrite` role scoped to the one collection
+`ripple.spec_requests` (it can't touch runs, boards, configs or lessons). Env var `MONGODB_URI_REQUESTS` (server-side only; set it in Vercel and `apps/web/.env.local`).
 Keep using `MONGODB_URI_READER` for every read except request status if you prefer one client per user.
 
 **Insert** (from a route handler, e.g. `POST /api/spec`):
@@ -165,6 +165,6 @@ If the worker dies mid-request, the request stays `running` with a stale `heartb
 with the same `board_id`. Requests run one at a time, oldest first (model budget). The finale takes minutes; single
 specs take seconds to about a minute.
 
-**Atlas setup (Jovian, once):** Security → Database & Network Access → Custom Roles → Add: name `spec_requester`,
-actions `insert` and `find` on database `ripple`, collection `spec_requests`. Then Database Users → Add New User
-`ripple_requester` with that custom role only; its connection string goes in `MONGODB_URI_REQUESTS`.
+**Atlas setup (Jovian, once):** Database Users → Add New Database User `ripple_requester` → Database User Privileges →
+Specific Privileges → Add Specific Privilege → built-in role `readWrite`, database `ripple`, collection `spec_requests`
+(nothing else). Its connection string goes in `MONGODB_URI_REQUESTS`.

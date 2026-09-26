@@ -113,7 +113,7 @@ specs are refused. `--specs a,b` limits the batch (cheaper while developing).
 
 ## `harness/requests.ts` + `npm run worker`: spec requests from the web app
 
-The web app's `ripple_requester` user can only insert into `spec_requests`. `serveRequests(handler)` recovers interrupted
+The web app's `ripple_requester` user has `readWrite` on the `spec_requests` collection only. `serveRequests(handler)` recovers interrupted
 requests (its own at restart, anyone's after a 60 s stale heartbeat), claims the oldest `queued` one atomically, runs it
 with heartbeats, and writes `status` / `board_id` / `passed` / `attempts` / `error` back; new inserts wake it through a
 change stream, with a 10 s poll as backup. `scripts/worker.ts` is the handler: `spec_id` from `specs/specs.json` →
