@@ -97,6 +97,8 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
         lessons,
         subcircuits,
         previousFailure: config.context.include_last_failure ? previousFailure : undefined,
+        // Repairs edit the last attempt's code (including code that didn't compile) instead of starting over.
+        previousSource: config.context.include_last_failure && previousFailure ? source : undefined,
       });
       source = coderResult.source;
       const checked = await checks.runChecks(coderResult.circuitJson, opts.expectedFor ? opts.expectedFor(coderResult.circuitJson) : expected, {
@@ -187,6 +189,14 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
           tokens: u.totalTokens,
           cost_usd: u.costUsd,
           ts: new Date().toISOString(),
+          // What the critic told the coder, so a repair that didn't work can be read back.
+          critique: {
+            diagnosis: critic.diagnosis,
+            fix: critic.fix,
+            escalate: critic.escalate,
+            ...(critic.escalate_reason && { escalate_reason: critic.escalate_reason }),
+            lessons_saved: critic.saved_lesson_ids,
+          },
         });
       }
     }

@@ -17,6 +17,8 @@ export interface CoderInput {
   lessons?: Lesson[];
   subcircuits?: Subcircuit[];
   previousFailure?: string;
+  /** The previous attempt's code. With it, the coder edits that code instead of writing a new board. */
+  previousSource?: string;
 }
 
 export interface CoderModelInfo {
@@ -96,6 +98,15 @@ function buildUserPrompt(input: CoderInput): string {
       .map((s) => `// ${s.name}\n${s.code}`)
       .join("\n\n");
     parts.push(`Verified subcircuits available for reuse:\n${subcircuitText}`);
+  }
+
+  if (input.previousSource) {
+    // A rewrite loses whatever the last attempt got right (and a critic's "move C1 to pcbX/pcbY" refers to this code),
+    // so the repair is an edit of it.
+    parts.push(
+      `Your previous version:\n${input.previousSource}\n\n` +
+        `Edit this code. Apply only the fixes below; keep every other part, name, value, position and trace exactly as it is.`,
+    );
   }
 
   if (input.previousFailure) {
