@@ -5,7 +5,7 @@ import {
   type HarnessObservation,
 } from "@/lib/harness-observability";
 import type { LessonDoc, SubcircuitDoc } from "@/lib/live";
-import { ACTOR_LABEL, Field, NotRecorded, clockTime, fmtCost, fmtTokens } from "./primitives";
+import { ACTOR_LABEL, Disclosure, Field, NotRecorded, clockTime, fmtCost, fmtTokens } from "./primitives";
 
 export function ObservationInspector({
   observation,
@@ -100,34 +100,38 @@ export function ObservationInspector({
       ) : null}
 
       <div className="border-t border-hair pt-4">
-        <div className="text-[11px] text-faint">Memory used</div>
         {!o.memory ? (
-          <div className="mt-1">
-            <NotRecorded what="for this run" />
-          </div>
+          <>
+            <div className="text-[11px] text-faint">Memory used</div>
+            <div className="mt-1">
+              <NotRecorded what="for this run" />
+            </div>
+          </>
         ) : (
-          <div className="mt-1.5 space-y-2">
-            {mem.lessons.map((l) => (
-              <div key={l._id} className="text-[12px]">
-                <span className="font-mono text-[11px] text-ghost">
-                  {l._id.replace(/^lesson_/, "L-").slice(0, 10)}{" "}
-                </span>
-                <span className="text-dim">{l.pattern}</span>
-              </div>
-            ))}
-            {mem.subcircuits.map((s) => (
-              <div key={s._id} className="text-[12px]">
-                <span className="font-mono text-[11px] text-ghost">sub </span>
-                <span className="text-dim">{s.name}</span>
-              </div>
-            ))}
-            {mem.unresolved > 0 ? (
-              <p className="text-[11px] text-ghost">
-                {mem.unresolved} id{mem.unresolved === 1 ? "" : "s"} not in the
-                current memory page
-              </p>
-            ) : null}
-          </div>
+          <Disclosure label={`Memory used (${mem.lessons.length + mem.subcircuits.length})`}>
+            <div className="space-y-2">
+              {mem.lessons.map((l) => (
+                <div key={l._id} className="text-[12px]">
+                  <span className="font-mono text-[11px] text-ghost">
+                    {l._id.replace(/^lesson_/, "L-").slice(0, 10)}{" "}
+                  </span>
+                  <span className="text-dim">{l.pattern}</span>
+                </div>
+              ))}
+              {mem.subcircuits.map((s) => (
+                <div key={s._id} className="text-[12px]">
+                  <span className="font-mono text-[11px] text-ghost">sub </span>
+                  <span className="text-dim">{s.name}</span>
+                </div>
+              ))}
+              {mem.unresolved > 0 ? (
+                <p className="text-[11px] text-ghost">
+                  {mem.unresolved} id{mem.unresolved === 1 ? "" : "s"} not in the
+                  current memory page
+                </p>
+              ) : null}
+            </div>
+          </Disclosure>
         )}
       </div>
 

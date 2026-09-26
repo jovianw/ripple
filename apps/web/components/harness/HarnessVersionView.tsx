@@ -1,7 +1,7 @@
 "use client";
 
 import type { HarnessDoc } from "@/lib/live";
-import { Field } from "./primitives";
+import { Disclosure, Field } from "./primitives";
 
 const asNum = (v: unknown): string =>
   typeof v === "number" ? String(v) : v === undefined ? "—" : String(v);
@@ -45,16 +45,15 @@ export function HarnessVersionView({ version }: { version: HarnessDoc | null }) 
       ) : null}
 
       {version.rules && version.rules.length > 0 ? (
-        <div>
-          <div className="text-[11px] text-faint">Rules</div>
-          <ul className="mt-1 space-y-0.5">
+        <Disclosure label="Rule text">
+          <ul className="space-y-0.5">
             {version.rules.map((r) => (
               <li key={r} className="text-[12px] text-dim">
                 {r}
               </li>
             ))}
           </ul>
-        </div>
+        </Disclosure>
       ) : null}
     </div>
   );
