@@ -4,7 +4,7 @@
 //
 // Each subcircuit step stores its code as a `boards` document in the same transaction that marks the step done,
 // so the assemble step (and a restarted worker) reads finished subcircuits back from Atlas, never from memory.
-import type { HarnessConfig, Lesson, RunResult } from "@ripple/types"
+import type { CheckFailure, HarnessConfig, Lesson, RunResult } from "@ripple/types"
 import type { Document } from "mongodb"
 import { col } from "../db.js"
 import { enqueue, progress, runQueue, type Handler } from "../harness/queue.js"
@@ -13,18 +13,30 @@ import type { CoderInput } from "../agents/coder.js"
 import { assemble } from "../assembler/assembler.js"
 import { getPart, partExample } from "../tools/parts-whitelist.js"
 import { evaluateCircuitSource } from "../tools/evaluate.js"
+import { attributeFailures } from "./attribute.js"
 
 /**
  * Mechanical fixes to coder output that don't change the design:
- * - trace-length limits (maxLength, and decouplingFor/decouplingTo, which make tscircuit enforce a ~1mm decoupling
- *   trace) only ever block the autorouter; the hidden checks verify capacitor placement instead;
- * - ".R1.pin2" selectors -> ".R1 > .pin2".
+ * - trace-length limits only ever block the autorouter. tscircuit gives every power-to-ground capacitor a 1mm
+ *   maximum trace automatically, so each capacitor gets an explicit, generous maxDecouplingTraceLength; coder-set
+ *   maxLength/decouplingFor/decouplingTo are removed. The hidden checks still enforce the 3mm placement rule.
+ * - ".R1.pin2" selectors -> ".R1 > .pin2"; numeric pinLabels keys ("1") -> "pin1".
  */
 export function normalizeCoderSource(source: string): string {
   return source
     .replace(/\s+(?:maxLength|maxDecouplingTraceLength|decouplingFor|decouplingTo)=(?:"[^"]*"|'[^']*'|\{[^}]*\})/g, "")
+    .replace(/<capacitor\b/g, "<capacitor maxDecouplingTraceLength={1000}")
     .replace(/\b(from|to)="\.([A-Za-z_][\w]*)\.([A-Za-z_][\w]*)"/g, '$1=".$2 > .$3"')
+    // pinLabels={{"1":"MISO"}} -> pinLabels={{"pin1":"MISO"}}: tscircuit ignores numeric keys.
+    .replace(/pinLabels=\{\{([^}]*)\}\}/g, (_m, body: string) =>
+      `pinLabels={{${body.replace(/(^|[{,]\s*)["']?(\d+)["']?\s*:/g, '$1"pin$2":')}}}`)
 }
+
+/** The same code with the coder's positions removed, so tscircuit places the parts itself (no overlaps). */
+export function withoutPlacement(source: string): string {
+  return source.replace(/\s+(?:pcbX|pcbY|pcbRotation)=(?:"[^"]*"|'[^']*'|\{[^}]*\})/g, "")
+}
+const OVERLAP = /overlap|placement_error|outside_board/
 
 type El = { type: string; [k: string]: unknown }
 
@@ -41,6 +53,10 @@ export interface PlannedBoardDeps {
   planner: PlannerDeps
   /** Lessons relevant to one subcircuit (memory.retrieveLessons); omit for no memory. */
   lessons?(query: string): Promise<Lesson[]>
+  /** Critic diagnosis for a subcircuit the assembled board blamed; omit to pass the raw failures only. */
+  critic?(ctx: { subKey: string; code: string; failures: CheckFailure[]; round: number; maxRounds: number }): Promise<string | undefined>
+  /** Repair rounds after a failed assembly (default 2). 0 records the failure without repairing. */
+  maxRepairRounds?: number
   log?: (msg: string) => void
 }
 
@@ -60,7 +76,9 @@ export function subcircuitSpec(spec: PlannedBoardSpec, key: string, p: Subcircui
     const letter = ({ resistor: "R", capacitor: "C", led: "D", pinheader: "J", pushbutton: "SW", crystal: "Y", diode: "D" } as Record<string, string>)[w?.element ?? ""] ?? "U"
     return `- ${x.qty}x ${x.for}: ${w ? partExample(w, `${prefix(key)}_${letter}1`) : x.part}`
   }).join("\n")
-  const headers = p.headers.map((h) => `- a ${h.labels.length}-pin header with pin labels (${h.labels.join(", ")}), exactly as written`).join("\n")
+  // Exact header JSX with the spec's labels: without pinLabels the header's pins are just pin1..pinN.
+  const headers = p.headers.map((h, i) =>
+    `- <pinheader name="${prefix(key)}_J${i + 1}" pinCount={${h.labels.length}} footprint="pinrow${h.labels.length}" pinLabels={${JSON.stringify(h.labels)}} />`).join("\n")
   return `You are building ONE subcircuit of a larger board, not the whole board.
 
 Whole board (for context only): ${spec.text}
@@ -70,7 +88,7 @@ This subcircuit: ${p.purpose}
 Parts to use, written exactly like this (change only name and values; ids such as temp_sensor_lm75 are
 whitelist names, never JSX elements):
 ${parts || "- (choose from the whitelist)"}
-${headers ? `\nHeaders this subcircuit places:\n${headers}\n` : ""}
+${headers ? `\nHeaders this subcircuit places, written exactly like this (keep pinLabels):\n${headers}\n` : ""}
 Shared nets: connect to the rest of the board ONLY through these named nets, with trace to="net.NAME":
 ${p.nets.length ? p.nets.map((n) => `- net.${n}`).join("\n") : "- (none: this subcircuit is the whole board)"}
 Do not add parts that belong to other subcircuits.
@@ -93,6 +111,33 @@ export function boardModuleToGroup(source: string, key: string): string {
 
 const now = () => new Date().toISOString()
 
+/** A subcircuit rebuilt because the assembled board failed hidden checks it caused. */
+export interface RepairInfo {
+  /** The subcircuit being repaired (its group name, part prefix and board doc key stay the same). */
+  of: string
+  round: number
+  failures: CheckFailure[]
+  previous_source: string
+  diagnosis?: string
+}
+type StepPayload = SubcircuitPayload & { repair?: RepairInfo }
+type AssemblePayload = { kind: "assemble"; keys?: string[]; round?: number }
+
+function repairSection(r: RepairInfo): string {
+  return `
+
+## The assembled board failed these checks, caused by this subcircuit (repair round ${r.round})
+${r.failures.map((f) => `- ${f.check}: ${f.detail}`).join("\n")}
+${r.diagnosis ? `\n## Diagnosis and fix\n${r.diagnosis}\n` : ""}
+Fix only the parts in THIS subcircuit. Some failures involve parts in other subcircuits (e.g. the USB connector,
+the MCU): never add those parts here; just make sure your side of the shared nets (net.NAME) is connected.
+
+## Your previous version: edit it, keep everything that already works
+\`\`\`tsx
+${r.previous_source}
+\`\`\``
+}
+
 /** Plans and enqueues the board unless it's already queued (a rerun resumes instead of replanning). */
 export async function startPlannedBoard(boardId: string, spec: PlannedBoardSpec, config: HarnessConfig, deps: PlannedBoardDeps): Promise<Plan | null> {
   if (await col.queue.countDocuments({ board_id: boardId })) return null
@@ -109,9 +154,10 @@ export function plannedBoardHandler(spec: PlannedBoardSpec, config: HarnessConfi
   const base = (boardId: string) => ({ board_id: boardId, harness_version: config.version, ts: now() })
 
   return async (item) => {
-    const payload = item.payload as (SubcircuitPayload | { kind: "assemble" }) | undefined
+    const payload = item.payload as (StepPayload | AssemblePayload) | undefined
     if (payload?.kind === "assemble") {
-      const keys = (item.depends_on ?? []).map((id) => id.slice(item.board_id.length + 1))
+      const round = payload.round ?? 0
+      const keys = payload.keys ?? (item.depends_on ?? []).map((id) => id.slice(item.board_id.length + 1))
       const docs = await col.boards
         .find({ board_id: item.board_id, kind: "subcircuit", key: { $in: keys } }, { sort: { created_at: -1 } })
         .toArray()
@@ -122,31 +168,79 @@ export function plannedBoardHandler(spec: PlannedBoardSpec, config: HarnessConfi
       const r = await assemble(keys.map((k) => ({ name: k, code: latest.get(k)!.group_code as string })), { specId: spec._id })
       const result = r.result!
       const run: RunResult = { ...result, ...base(item.board_id), stage: "final" }
-      deps.log?.(`assembled ${keys.length} subcircuits: ${result.passed ? "passed" : `failed ${result.failures.length} hidden check(s)`}`)
-      // Assembly is deterministic, so a hidden-check failure is recorded, not retried; the critic/replan acts on it.
+      deps.log?.(`assembled ${keys.length} subcircuits${round ? ` (repair round ${round})` : ""}: ${result.passed ? "passed" : `failed ${result.failures.length} hidden check(s)`}`)
+
+      // Repair loop: blame each failure on the subcircuit that caused it, rebuild just those, reassemble.
+      // Enqueued before this step commits; keys are deterministic, so a crash and rerun enqueues nothing twice.
+      const maxRounds = deps.maxRepairRounds ?? 2
+      if (!result.passed && round < maxRounds) {
+        const blame = attributeFailures(result.failures, r.circuitJson as never, keys)
+        if (blame.bySubcircuit.size) {
+          const next = round + 1
+          const repairs = []
+          for (const [subKey, failures] of blame.bySubcircuit) {
+            const doc = latest.get(subKey)!
+            const original = (doc.payload ?? (await col.queue.findOne({ board_id: item.board_id, key: subKey }))?.payload) as StepPayload
+            const code = doc.source as string
+            const diagnosis = deps.critic ? await deps.critic({ subKey, code, failures, round: next, maxRounds }) : undefined
+            repairs.push({
+              key: `${subKey}_r${next}`,
+              title: `Repair ${subKey} (round ${next}): ${failures.length} failure(s)`,
+              payload: { ...original, repair: { of: subKey, round: next, failures, previous_source: code, diagnosis } } as unknown as Record<string, unknown>,
+            })
+          }
+          await enqueue(item.board_id, [
+            ...repairs,
+            { key: `assemble_r${next}`, title: `Reassemble (repair round ${next})`, depends_on: repairs.map((x) => x.key), payload: { kind: "assemble", keys, round: next } },
+          ])
+          deps.log?.(`repair round ${next}: ${[...blame.bySubcircuit].map(([k, f]) => `${k} (${f.length})`).join(", ")}${blame.unattributed.length ? `; ${blame.unattributed.length} failure(s) not tied to a block` : ""}`)
+        } else {
+          deps.log?.(`no failure could be tied to a subcircuit; not repairing`)
+        }
+      }
       return {
         run,
         board: {
           board_id: item.board_id, kind: "final", spec_id: spec._id, harness_version: config.version,
           code: r.code, circuit_json: r.circuitJson, passed: result.passed, failures: result.failures,
-          subcircuits_used: keys, created_at: new Date(),
+          subcircuits_used: keys, round, created_at: new Date(),
         },
       }
     }
 
-    // A subcircuit (or the whole board when the plan didn't split).
-    const p = payload as SubcircuitPayload
+    // A subcircuit (or the whole board when the plan didn't split), or a repair of one.
+    const p = payload as StepPayload
+    const subKey = p.repair?.of ?? item.key
     const lessons = deps.lessons ? await deps.lessons(`${p.purpose}. ${p.parts.map((x) => x.part).join(", ")}`) : undefined
-    let out = await deps.coder({
-      specText: p.nets.length ? subcircuitSpec(spec, item.key, p) : spec.text,
+    const lastRepairAttempt = !!p.repair && item.attempts >= ((item as { max_attempts?: number }).max_attempts ?? 3)
+    const keepPrevious = (why: string) => {
+      deps.log?.(`${item.key}: repair failed ${item.attempts}x; keeping ${subKey}'s previous version`)
+      return { run: { ...base(item.board_id), stage: "repair", passed: false, failures: [{ check: "repair", detail: why.slice(0, 500) }], drc_errors: 0 } as RunResult }
+    }
+    let out: CoderOutput
+    try {
+      out = await deps.coder({
+      specText: (p.nets.length ? subcircuitSpec(spec, subKey, p) : spec.text) + (p.repair ? repairSection(p.repair) : ""),
       config,
       lessons,
       previousFailure: item.attempts > 1 ? (item as { error?: string }).error : undefined,
-    })
+      })
+    } catch (err) {
+      if (lastRepairAttempt) return keepPrevious(err instanceof Error ? err.message : String(err))
+      throw err
+    }
+    const render = async (source: string) => (await evaluateCircuitSource(source)).circuitJson as unknown as El[]
     const normalized = normalizeCoderSource(out.source)
-    if (normalized !== out.source) {
-      out = { ...out, source: normalized, circuitJson: (await evaluateCircuitSource(normalized)).circuitJson as unknown as El[] }
-      deps.log?.(`${item.key}: normalized coder output (trace-length limits, selector syntax)`)
+    if (normalized !== out.source) out = { ...out, source: normalized, circuitJson: await render(normalized) }
+    // Parts on top of each other: let tscircuit place them instead, if that renders with fewer errors.
+    const errorCount = (json: El[]) => json.filter((e) => e.type.endsWith("_error")).length
+    if (out.circuitJson.some((e) => e.type.endsWith("_error") && OVERLAP.test(`${e.type} ${e.message ?? ""}`))) {
+      const auto = withoutPlacement(out.source)
+      const json = await render(auto)
+      if (errorCount(json) < errorCount(out.circuitJson)) {
+        out = { ...out, source: auto, circuitJson: json }
+        deps.log?.(`${item.key}: coder's parts overlapped; using tscircuit's placement instead`)
+      }
     }
     // Shared nets (V3V3, SDA...) only get their other ends at assembly, so a subcircuit routed on its own can't
     // finish them. Defer "not connected" errors on planned shared nets to the assembled board, which gets full
@@ -158,16 +252,27 @@ export function plannedBoardHandler(spec: PlannedBoardSpec, config: HarnessConfi
     const errors = out.circuitJson
       .filter((e) => e.type.endsWith("_error") && !deferred(e))
       .map((e) => `${e.type}: ${(e.message as string) ?? ""}`)
-    const problems = [...errors, ...checkInterface(p, out.circuitJson as never)]
+    // A repair may swap a part the plan chose (e.g. the wrong MCU for the header), so it isn't held to the plan's chips.
+    const problems = [...errors, ...checkInterface(p.repair ? { ...p, parts: [] } : p, out.circuitJson as never)]
+    // A repair that used its last attempt keeps the block's previous version instead of blocking reassembly.
+    // Show the coder its own header line when the header is wrong, so the retry can see what to change.
+    if (problems.some((x) => x.startsWith("header ("))) {
+      const written = out.source.match(/<pinheader\b[^>]*>/g)
+      problems.push(`your header code: ${written ? written.join(" ") : "(no <pinheader> in the code)"}`)
+    }
+    if (problems.length && lastRepairAttempt) return keepPrevious(problems.slice(0, 4).join("; "))
     if (problems.length) throw new Error(`${item.key}: ${problems.slice(0, 8).join("; ")}`)
-    const group_code = boardModuleToGroup(out.source, item.key)
+    const group_code = boardModuleToGroup(out.source, subKey)
     const run: RunResult = {
       ...base(item.board_id), stage: "subcircuit", passed: true, failures: [], drc_errors: 0,
       model: out.model?.tier, tokens: out.model?.totalTokens, cost_usd: out.model?.costUsd,
     }
     return {
       run,
-      board: { board_id: item.board_id, kind: "subcircuit", key: item.key, spec_id: spec._id, source: out.source, group_code, created_at: new Date() },
+      board: {
+        board_id: item.board_id, kind: "subcircuit", key: subKey, item_key: item.key, round: p.repair?.round ?? 0,
+        spec_id: spec._id, source: out.source, group_code, payload: { ...p, repair: undefined }, created_at: new Date(),
+      },
     }
   }
 }
