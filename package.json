@@ -20,12 +20,22 @@
     "test:assembler": "tsx --test apps/worker/src/assembler/assembler.test.ts",
     "try:critic": "tsx --env-file-if-exists=.env scripts/try-critic.tsx",
     "test:planner": "tsx --test apps/worker/src/agents/planner/planner.test.tsx",
-    "try:planner": "tsx --env-file-if-exists=.env scripts/try-planner.ts"
+    "try:planner": "tsx --env-file-if-exists=.env scripts/try-planner.ts",
+    "export": "tsx scripts/export-board.tsx",
+    "test:export": "tsx --test apps/worker/src/export/deliverables.test.tsx"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "2.6.2",
     "@tscircuit/checks": "0.0.208",
     "@types/node": "24.19.0",
+    "circuit-json-to-bom-csv": "0.0.17",
+    "circuit-json-to-gerber": "0.0.107",
+    "circuit-json-to-gltf": "0.0.133",
+    "circuit-json-to-kicad": "0.0.222",
+    "circuit-json-to-pnp-csv": "0.0.16",
+    "circuit-json-to-spice": "0.0.45",
     "circuit-to-svg": "0.0.430",
+    "fflate": "0.8.3",
     "tscircuit": "0.0.2646",
     "tsx": "4.23.15",
     "typescript": "^5.6.0"
