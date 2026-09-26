@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+/* Ripple is a dark engineering dashboard: one theme, tuned for a projector. */
+
+:root {
+  color-scheme: dark;
+
+  --bg: #0a0c0e;
+  --panel: #101316;
+  --panel-raised: #151a1e;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.16);
+
+  --ink: rgba(255, 255, 255, 0.92);
+  --ink-dim: rgba(255, 255, 255, 0.58);
+  --ink-faint: rgba(255, 255, 255, 0.34);
+
+  --accent: #4ea8ff;
+  --good: #2fd27a;
+  --warn: #ffb020;
+  --bad: #ff4d4d;
+  --copper: #c2803a;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-raised: var(--panel-raised);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-dim: var(--ink-dim);
+  --color-faint: var(--ink-faint);
+  --color-accent: var(--accent);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  --color-copper: var(--copper);
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  overscroll-behavior: none;
+}
+
+/* Technical grid, kept faint enough to read as texture rather than decoration. */
+.tech-grid {
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: -1px -1px;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 200ms ease-out both;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.pulse-dot {
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .pulse-dot {
+    animation: none;
+  }
+}
+
+/* Thin scrollbars so the activity panel doesn't shout. */
+.slim-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
