@@ -24,6 +24,7 @@ Scripts under `scripts/` import the `.ts` files directly (`../apps/worker/src/ha
 | `npm run seed:config` | Inserts harness config v0 if missing and prints the current config. Safe to re-run. Already done. |
 | `npm run green` | Checks writer, read-only reader, Voyage, and one cheap OpenRouter call traced in LangSmith. `npm run green -- voyage` runs one check. |
 | `npm run queue:demo` | Kill-and-resume demo on a finale-shaped board with a stand-in handler. `-- --reset` starts over. Ctrl+C mid-run, rerun, it resumes. |
+| `npm run worker` | Serves spec requests from the web app (change stream on `spec_requests`). Ctrl+C stops; restart resumes. |
 | `npm run evolve` | Batch → meta-agent proposal → gate decision, per round. `-- --rounds 3`, `-- --specs t04_...,t08_...`. Spends model budget. |
 
 Env: `MONGODB_URI`, `MONGODB_DB=ripple`, `VOYAGE_API_KEY`, optional `VOYAGE_MODEL` (default `voyage-4`, 1024 dims),
@@ -109,6 +110,21 @@ those boards instead of being run again.
 Arjun's `proposeFromBatch` (meta-agent; may propose nothing) → `evaluatePending` with a fresh test batch under the
 proposal, reusing the first batch for the parent → prints the config diff and the verdict. Training specs only; held-out
 specs are refused. `--specs a,b` limits the batch (cheaper while developing).
+
+## `harness/requests.ts` + `npm run worker`: spec requests from the web app
+
+The web app's `ripple_requester` user can only insert into `spec_requests`. `serveRequests(handler)` recovers interrupted
+requests (its own at restart, anyone's after a 60 s stale heartbeat), claims the oldest `queued` one atomically, runs it
+with heartbeats, and writes `status` / `board_id` / `passed` / `attempts` / `error` back; new inserts wake it through a
+change stream, with a 10 s poll as backup. `scripts/worker.ts` is the handler: `spec_id` from `specs/specs.json` →
+Arjun's `runBoard` (held-out specs never write memory), `"finale"` → Marcos's `runPlannedBoard` with the live planner and
+coder, free text → failed with a clear message until ad-hoc `runBoard` exists. A resumed request reuses its `board_id`.
+Contract for the web side: `docs/frontend-backend.md` §5.
+
+## Lesson dedupe
+
+`addLesson` returns an existing active lesson's id instead of inserting when the new lesson's vector score against it is
+≥ 0.965 (a restatement). Measured on the first critic lessons: restatements scored ~0.98, distinct I2C lessons 0.93–0.955.
 
 ## Change streams
 

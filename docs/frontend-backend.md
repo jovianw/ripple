@@ -133,9 +133,38 @@ Always project out `embedding` (1024 numbers per doc).
 
 ## 4. Things the web app can't do yet
 
-- **Submit a spec.** The web app can't write to Atlas. For the demo, specs are run from the worker CLI (`npm run finale`,
-  Arjun's batch scripts). If a live "type a spec" box is needed, ask Jovian for a small worker endpoint or a
-  `spec_requests` collection written through the worker; don't give the web app the writer URI.
+- **Submit a spec: now possible, through `spec_requests` (see §5).** The web app still never gets the writer URI.
 - **"Why?" trace per decision.** Runs don't yet record which lessons or rules were in the coder's context. *Gap
   (Arjun/Jovian):* add `lessons_used: string[]` and `subcircuits_used: string[]` to the run document; until then, link a
   board to its config version's `rules` via `harness_version`.
+
+## 5. Submitting a spec (`spec_requests`)
+
+The prompt box inserts a request; the worker (`npm run worker`, running on the demo laptop) picks it up through an Atlas
+change stream, runs it, and writes the status back. Design state is still written only by the worker.
+
+**Connection:** a third user, `ripple_requester`, whose custom role allows only `insert` and `find` on
+`ripple.spec_requests`. Env var `MONGODB_URI_REQUESTS` (server-side only; set it in Vercel and `apps/web/.env.local`).
+Keep using `MONGODB_URI_READER` for every read except request status if you prefer one client per user.
+
+**Insert** (from a route handler, e.g. `POST /api/spec`):
+```ts
+await requests.insertOne({ spec_id, status: "queued", created_at: new Date().toISOString() });
+// spec_id: an _id from specs/specs.json (t01_… t08_, h01_… h04_) or "finale". Free text (`text`) is rejected until
+// Arjun's ad-hoc runBoard lands; offer a spec picker for now.
+```
+
+**Status** (poll every 2 s, or the same change-stream pattern as runs):
+```ts
+db().collection("spec_requests").findOne({ _id })
+// status: "queued" → "running" → "done" | "failed"
+// board_id (set as soon as it starts; join runs and boards on it), harness_version, passed, attempts,
+// error (when failed, human-readable), created_at, started_at, finished_at, heartbeat (ISO, every 5 s while running)
+```
+If the worker dies mid-request, the request stays `running` with a stale `heartbeat`; the restarted worker resumes it
+with the same `board_id`. Requests run one at a time, oldest first (model budget). The finale takes minutes; single
+specs take seconds to about a minute.
+
+**Atlas setup (Jovian, once):** Security → Database & Network Access → Custom Roles → Add: name `spec_requester`,
+actions `insert` and `find` on database `ripple`, collection `spec_requests`. Then Database Users → Add New User
+`ripple_requester` with that custom role only; its connection string goes in `MONGODB_URI_REQUESTS`.

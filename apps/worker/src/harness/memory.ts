@@ -91,10 +91,22 @@ const hashId = (prefix: string, text: string) =>
 
 // ---- lessons (learned design rules) ----
 
-/** Stores a lesson. The same pattern always maps to the same id, so re-learning it updates instead of duplicating. */
+// Vector-search score (cosine, normalized to 0..1) at or above which a new lesson counts as a restatement of an existing
+// one. Measured on the first 12 critic lessons: restated pull-up lessons scored 0.978, while genuinely different I2C lessons
+// (address pins, bus wiring) scored 0.93–0.955, so this stays conservative.
+const DUPLICATE_SCORE = 0.965;
+
+/**
+ * Stores a lesson. The same pattern always maps to the same id, so re-learning it updates instead of duplicating;
+ * a new pattern that restates an existing active lesson (score ≥ DUPLICATE_SCORE) returns that lesson's id instead.
+ */
 export async function addLesson(lesson: { pattern: string; fix: string }): Promise<string> {
   const _id = hashId("lesson", lesson.pattern);
   const [embedding] = await embed([lessonText(lesson)], "document");
+  if (!(await col.lessons.countDocuments({ _id }, { limit: 1 }))) {
+    const [near] = await vectorSearch(col.lessons, "lessons_vec", embedding, 1, { active: true });
+    if (near && near.score >= DUPLICATE_SCORE) return near._id;
+  }
   await col.lessons.updateOne(
     { _id },
     {
