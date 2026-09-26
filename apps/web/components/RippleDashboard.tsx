@@ -66,6 +66,10 @@ export function RippleDashboard() {
   const [selected, setSelected] = useState<PCBComponent | null>(null);
   const [showDeliverables, setShowDeliverables] = useState(false);
   const [snapshots, setSnapshots] = useState<BuildSnapshot[]>(DEMO_SNAPSHOTS);
+  // Non-null while a real build is in flight: what the worker is doing now.
+  const [awaiting, setAwaiting] = useState<
+    "submitting" | "queued" | "running" | null
+  >(null);
   const [source, setSource] = useState<RunSource>(SCRIPTED);
 
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -113,10 +117,15 @@ export function RippleDashboard() {
   const [requestId, setRequestId] = useState<string | null>(null);
   const [requestNote, setRequestNote] = useState<string | null>(null);
   const build = useCallback(() => {
-    // The scripted walkthrough starts at once so the screen is never dead
-    // while the worker thinks; the real board replaces it when it lands.
-    setSource(SCRIPTED);
-    play(DEMO_SNAPSHOTS);
+    // Don't animate a board nobody asked for. The worker takes a few seconds;
+    // until it answers, the view waits on the real request and says so. The
+    // scripted walkthrough is the fallback for when there is no worker at all.
+    clearTimers();
+    setRevealed(0);
+    setCurrentIndex(-1);
+    setSelected(null);
+    setShowDeliverables(false);
+    setAwaiting("submitting");
     setRequestId(null);
     setRequestNote(null);
     fetch("/api/spec", {
@@ -126,11 +135,24 @@ export function RippleDashboard() {
     })
       .then(async (r) => {
         const json = await r.json().catch(() => null);
-        if (r.ok && json?.request_id) setRequestId(json.request_id);
-        else setRequestNote(`Real build not sent: ${json?.error ?? r.statusText}`);
+        if (r.ok && json?.request_id) {
+          setRequestId(json.request_id);
+          setAwaiting("queued");
+          return;
+        }
+        // No worker path available — fall back, and label it honestly.
+        setRequestNote(`Real build not sent: ${json?.error ?? r.statusText}`);
+        setAwaiting(null);
+        setSource({ kind: "scripted", label: "no worker — scripted walkthrough" });
+        play(DEMO_SNAPSHOTS);
       })
-      .catch(() => setRequestNote("Real build not sent: the server is unreachable"));
-  }, [play, prompt]);
+      .catch(() => {
+        setRequestNote("Real build not sent: the server is unreachable");
+        setAwaiting(null);
+        setSource({ kind: "scripted", label: "no worker — scripted walkthrough" });
+        play(DEMO_SNAPSHOTS);
+      });
+  }, [play, prompt, clearTimers]);
 
   /**
    * The worker finished the specification that was submitted. Swap the
@@ -149,6 +171,7 @@ export function RippleDashboard() {
           `/api/runs?board_id=${encodeURIComponent(boardId)}&limit=50`,
         ))?.runs ?? [];
 
+      setAwaiting(null);
       setSource({
         kind: "real",
         label: `real build · ${boardId.slice(0, 8)}`,
@@ -175,6 +198,7 @@ export function RippleDashboard() {
     setShowDeliverables(false);
     setSnapshots(DEMO_SNAPSHOTS);
     setSource(SCRIPTED);
+    setAwaiting(null);
   }, [clearTimers]);
 
   const scrubTo = useCallback((index: number) => {
@@ -325,13 +349,30 @@ export function RippleDashboard() {
               </div>
             </div>
           ) : (
-            <div className="pointer-events-none absolute left-6 top-5 max-w-[20rem]">
-              <div className="text-[20px] font-medium leading-tight text-dim">
-                Idle
+            <div className="pointer-events-none absolute left-6 top-5 max-w-[22rem]">
+              <div
+                className={`text-[20px] font-medium leading-tight ${
+                  awaiting ? "text-accent" : "text-dim"
+                }`}
+              >
+                {awaiting === "submitting"
+                  ? "Sending specification"
+                  : awaiting === "queued"
+                    ? "Queued for the worker"
+                    : awaiting === "running"
+                      ? "Designing on the worker"
+                      : "Idle"}
               </div>
               <div className="mt-1.5 text-[12px] text-dim">
-                Describe a board to begin synthesis.
+                {awaiting
+                  ? "Ripple is designing this board now. It renders here when the worker answers."
+                  : "Describe a board to begin synthesis."}
               </div>
+              {awaiting ? (
+                <div className="mt-3 h-px w-40 bg-hair">
+                  <div className="breathe h-px w-full bg-accent" />
+                </div>
+              ) : null}
             </div>
           )}
 
@@ -398,6 +439,9 @@ export function RippleDashboard() {
               requestId={requestId}
               note={requestNote}
               onBoard={(id) => void showRealBoard(id)}
+              onStatus={(st) =>
+                setAwaiting((prev) => (prev === null ? null : st))
+              }
             />
           </div>
 

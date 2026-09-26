@@ -22,11 +22,14 @@ export function RealBuildStatus({
   requestId,
   note,
   onBoard,
+  onStatus,
 }: {
   requestId: string | null;
   note: string | null;
   /** Fired once, when the worker's board for this request exists. */
   onBoard?: (boardId: string) => void;
+  /** Fired on each poll so the main view can show what the worker is doing. */
+  onStatus?: (status: "queued" | "running") => void;
 }) {
   const [req, setReq] = useState<RequestState | null>(null);
 
@@ -38,6 +41,7 @@ export function RealBuildStatus({
       const json = (await r?.json().catch(() => null)) as RequestState | null;
       if (stopped || !json || !("status" in json)) return;
       setReq(json);
+      if (json.status === "queued" || json.status === "running") onStatus?.(json.status);
       if (json.status === "done" || json.status === "failed") {
         stopped = true;
         if (json.status === "done" && json.board_id) onBoard?.(json.board_id);
@@ -50,7 +54,7 @@ export function RealBuildStatus({
       clearTimeout(first);
       clearInterval(timer);
     };
-  }, [requestId, onBoard]);
+  }, [requestId, onBoard, onStatus]);
 
   if (!requestId) return note ? <p className="mt-1 text-[11px] text-faint">{note}</p> : null;
 
