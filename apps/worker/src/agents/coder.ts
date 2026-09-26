@@ -1,7 +1,7 @@
 // Coder agent: spec + context -> tscircuit TSX -> CircuitJson -> DRC/metrics.
 // One-shot generation, no retry/repair loop (that's the critic's job, not
 // built yet). No hidden-check calls, no Mongo writes, no lesson writing.
-import type { HarnessConfig, Lesson, ModelTier, Subcircuit } from "@board-forge/types";
+import type { HarnessConfig, Lesson, ModelTier, Subcircuit } from "@ripple/types";
 import type { CircuitJson } from "tscircuit";
 import { callModel, type ChatMessage } from "../tools/router.js";
 import { evaluateCircuitSource } from "../tools/evaluate.js";

@@ -13,5 +13,6 @@
     }
   },
   "include": ["src"],
-  "references": [{ "path": "../../packages/types" }]
+  "references": [{ "path": "../../packages/types" }],
+  "exclude": ["src/**/*.test.ts"]
 }

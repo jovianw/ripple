@@ -1,4 +1,4 @@
-# Board Forge: Design Doc
+# Ripple: Design Doc
 
 > A self-improving harness that designs circuit boards from a spec, checks them against a hidden spec it never sees, and redesigns itself based on what fails.
 >
@@ -10,7 +10,7 @@
 
 ## 1. Overview
 
-Board Forge has two layers.
+Ripple has two layers.
 
 - **The harness** turns an English spec (for example, "read a temperature sensor over I2C, powered from USB-C, with a status LED") into a routed PCB written in [tscircuit](https://tscircuit.com). Agents plan, write, and repair the board; deterministic tools compile, autoroute, and check it; verified subcircuits go into a reusable library.
 - **The meta-harness** treats the harness itself as something to optimize. It runs batches of specs, reads the failures, proposes changes to the harness config (rules, context policy, tool access, workflow, model routing), and keeps a change only if scores improve on the next batch.
@@ -19,7 +19,7 @@ MongoDB Atlas is the memory and state layer for both: every spec, board, subcirc
 
 ### Problem statements
 
-| Statement | How Board Forge addresses it |
+| Statement | How Ripple addresses it |
 |---|---|
 | **One: Recursive Harnessing** | The harness config is a versioned document. A meta-agent rewrites its rules, context policy, tool access, workflow, and model routing; a config gate keeps, rolls back, or rejects each change. |
 | **Two: Long Horizon Engineering** | Large boards are split into a work queue of subcircuits, built and verified step by step, checkpointed throughout, and resumable after a crash. Context never grows: every call is rebuilt from Atlas. |
@@ -185,7 +185,7 @@ Values are illustrative.
 ### Repo layout
 
 ```
-board-forge/
+ripple/
   apps/
     worker/        # harness: agents/, tools/, harness/, db.ts
     web/           # Next.js UI
@@ -201,14 +201,14 @@ board-forge/
 ```
 MONGODB_URI=                 # writer user, worker only
 MONGODB_URI_READER=          # reader user, web + MCP
-MONGODB_DB=boardforge
+MONGODB_DB=ripple
 MDB_MCP_CONNECTION_STRING=   # same as reader
 OPENROUTER_API_KEY=
 VOYAGE_API_KEY=
 VOYAGE_MODEL=
 LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=
-LANGSMITH_PROJECT=board-forge
+LANGSMITH_PROJECT=ripple
 ```
 
 `.env`, `.mcp.json`, and editor MCP config folders are in `.gitignore`.
@@ -234,19 +234,21 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 - [ ] **4:30–5:00** Record the 1-minute video on site and submit
 
 ### Marcos: hardware logic, critic, planner, demo
-- [ ] **Before 10:30** Install tscircuit on every laptop; build an LED-plus-resistor board through the autorouter
+- [ ] **Before 10:30** Install tscircuit on every laptop; build an LED-plus-resistor board through the autorouter (`npm run smoke`; done on Marcos's laptop)
 - [ ] 10-minute PCB primer for the team at kickoff
-- [ ] **11:00–12:30** 8 training and 4 held-out specs; hidden checker (connectivity, pull-up and decoupling rules) returning `RunResult`
+- [x] **11:00–12:30** 8 training and 4 held-out specs (`specs/specs.json`); hidden checker returning `RunResult` (`checks/`, `npm run test:checks`); reference board per spec
 - [ ] **12:30–1:30** Critic agent (code and prompt) and lesson extraction into Atlas
 - [ ] **1:30–2:30** Planner agent and assembler
-- [ ] **2:30–3:30** Finale board spec, checks, first full run; parts whitelist
+- [x] Parts whitelist (`parts/whitelist.json` v2, `npm run verify:parts`)
+- [x] Finale board spec (`specs/finale.json`), checks, and 20-part reference board in three groups (`npm run smoke finale`)
+- [ ] **2:30–3:30** Finale first full run through the work queue
 - [ ] Present the live demo
 
 ### Jovian: harness core and memory
 - [x] Repo layout, `.env.example`, shared types package (done before kickoff)
-- [ ] **10:30–11:00** `db.ts`, index setup script; LangGraph go/no-go by 11:00
-- [ ] **11:00–12:00** Config versioning: `harness_versions`, current config, propose
-- [ ] **12:00–1:00** Memory: Voyage embeddings, vector indexes, retrieval and rerank
+- [x] **10:30–11:00** `db.ts`, index setup script; LangGraph go/no-go by 11:00 (`npm run setup:indexes`, `npm run green`; LangGraph: took the default, own transactions)
+- [x] **11:00–12:00** Config versioning: `harness_versions`, current config, propose (`apps/worker/src/harness/config.ts`: `currentConfig`, `getConfig`, `history`, `propose`; v0 seeded with `npm run seed:config`)
+- [x] **12:00–1:00** Memory: Voyage embeddings, vector indexes, retrieval and rerank (`apps/worker/src/harness/memory.ts`: `addLesson`/`retrieveLessons`, `addSubcircuit`/`retrieveSubcircuits`, `indexFailure`/`similarFailures`; k and rerank come from `config.context`)
 - [ ] **1:00–2:00** Work queue, transactions, idempotent runs, heartbeat, resume
 - [ ] **2:00–3:00** Config gate (keep, roll back, reject); change-stream triggers for critic and meta-agent
 - [ ] **3:00–3:30** Help run the finale board through the queue with kill-and-resume
@@ -342,7 +344,7 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 | Who attends MongoDB.local (Sept 30, 10 AM–4:30 PM) if we're top 6 | Today | — |
 
 ### Related work
-[Strands Harness Optimizer](https://github.com/strands-labs/harness-optimizer) tunes an agent's context (system prompt, tool docs, skills) from rollouts and rewards. Board Forge evolves the whole harness, including tool access, workflow, repair budgets, and model routing; refuses changes that weaken its own checks; keeps every version in Atlas; and runs long jobs that survive a crash.
+[Strands Harness Optimizer](https://github.com/strands-labs/harness-optimizer) tunes an agent's context (system prompt, tool docs, skills) from rollouts and rewards. Ripple evolves the whole harness, including tool access, workflow, repair budgets, and model routing; refuses changes that weaken its own checks; keeps every version in Atlas; and runs long jobs that survive a crash.
 
 ---
 

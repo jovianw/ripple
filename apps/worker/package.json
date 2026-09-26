@@ -1,13 +1,12 @@
 {
-  "name": "@board-forge/worker",
+  "name": "@ripple/worker",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@board-forge/types": "*",
+    "@ripple/types": "*",
+    "langsmith": "0.10.5",
+    "mongodb": "7.6.0",
     "tscircuit": "0.0.2646",
     "zod": "3.25.76"
-  },
-  "devDependencies": {
-    "@types/node": "^22.13.0"
   }
 }

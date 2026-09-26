@@ -1,7 +1,7 @@
 // Local verification for coder.ts. Not part of the public API.
 // Uses the real OpenRouter API — requires OPENROUTER_API_KEY.
 // Run after `npm run typecheck`: node apps/worker/dist/agents/coder.verify.js
-import type { HarnessConfig } from "@board-forge/types";
+import type { HarnessConfig } from "@ripple/types";
 import { runCoder } from "./coder.js";
 
 const config: HarnessConfig = {

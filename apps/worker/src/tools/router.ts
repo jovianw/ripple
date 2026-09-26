@@ -1,7 +1,7 @@
 // Model router: resolves an agent role to a model tier via HarnessConfig,
 // maps the tier to a concrete OpenRouter model id (single place to swap
 // model ids), and makes the call. Agents never talk to OpenRouter directly.
-import type { AgentName, HarnessConfig, ModelTier } from "@board-forge/types";
+import type { AgentName, HarnessConfig, ModelTier } from "@ripple/types";
 
 // Swap model ids here only. Confirmed cheap/strong pair for Ripple — see
 // report to Arjun for rationale.
