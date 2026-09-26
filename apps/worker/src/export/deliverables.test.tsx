@@ -42,6 +42,9 @@ test("board views: PCB and schematic SVG, BOM and netlist, with a manifest that 
   assert.deepEqual(v.manifest.files.map((f) => f.path), paths)
   const file = (p: string) => v.files.find((f) => f.path === p)!.content
   assert.match(file("images/pcb.svg"), /^<svg/)
+  // Scales to its box, and is drawn at the board's aspect ratio rather than a fixed 800x600 frame.
+  for (const p of ["images/pcb.svg", "images/schematic.svg"]) assert.match(file(p).match(/<svg[^>]*>/)![0], /viewBox="0 0 [\d.]+ [\d.]+"/, p)
+  assert.doesNotMatch(file("images/pcb.svg").match(/<svg[^>]*>/)![0], /width="800" height="600"/)
   // The schematic carries part names and pin labels as text.
   assert.match(file("images/schematic.svg"), /<text[^>]*>U2</)
   assert.match(file("assembly/bom.csv"), /"U2","ATtiny85-20SU"/)
