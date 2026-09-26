@@ -99,3 +99,29 @@ so neither can be used to walk out of the bundle directory.
 
 **Never feed deliverables back to the agents** — `report.md` embeds hidden-check
 failure detail.
+
+## Atlas
+
+Read-only, per `docs/frontend-backend.md`. `lib/db.ts` holds a cached
+`MongoClient` on `MONGODB_URI_READER`; the worker is the only writer. Query
+from route handlers only, never the browser, and never import
+`apps/worker/src/db.ts` — it demands the writer URI and throws without it.
+
+| Route | Returns |
+|---|---|
+| `GET /api/health` | connection state, per-collection counts, latency |
+| `GET /api/runs?since=&board_id=&limit=` | run feed; `since` is an ISO string for polling |
+| `GET /api/harness` | every config version plus the current kept one |
+| `GET /api/memory` | active lessons and reusable subcircuits |
+| `GET /api/queue?board_id=` | work items, with `stale` computed for dead workers |
+
+`/live` renders all of it, polling every 2s — serverless functions can't hold a
+change stream open. Embeddings are projected out of every response.
+
+**Environment:** `MONGODB_URI_READER` and `MONGODB_DB` locally in
+`apps/web/.env.local` (gitignored), and in the Vercel project's environment
+variables for deploys. Without them `/live` reports "Disconnected" and the
+routes return 503 rather than crashing the page.
+
+`/` does not touch Atlas: it stays on scripted snapshots so the demo cannot be
+broken by the database.
