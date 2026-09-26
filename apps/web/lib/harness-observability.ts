@@ -71,6 +71,7 @@ export const STAGE_ACTOR_MAP: Record<string, Actor> = {
   final: "assembler",
   meta: "meta",
   error: "system",
+  cache_hit: "system",
 };
 
 /** The design loop, as documented. `telemetry: false` means no run is ever
@@ -166,6 +167,8 @@ function summarizeRun(run: RunWithFuture, actor: Actor): string {
       return "Critique pass";
     case "meta":
       return "Harness evaluation";
+    case "cache_hit":
+      return "Served from cache — already verified under this harness version";
     default:
       return `${actor} · ${run.stage}`;
   }

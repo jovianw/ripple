@@ -3,7 +3,7 @@
 // on pass. runBoard does one spec; runBatch is the only batch runner — the
 // config gate and the ablation both call it with whatever config they're
 // scoring, not necessarily the current kept one.
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { BoardMetrics, HarnessConfig, RunResult, Spec } from "@ripple/types";
 import { retrieveLessons, retrieveSubcircuits, addLesson, addSubcircuit, markLessonsHelped, markSubcircuitsReused } from "../harness/memory.js";
 import { col } from "../db.js";
@@ -35,6 +35,20 @@ export interface RunBoardOptions {
   spec?: Spec;
   /** For a spec with no hidden-check file: builds the checks from each attempt's Circuit JSON (Marcos's generic checks). */
   expectedFor?: (circuitJson: unknown) => unknown;
+  /**
+   * Reuse an existing passing board instead of designing again, when one already exists for this exact key under
+   * the current harness_version. Off by default: `runBatch` (the gate, the ablation) must never take this path —
+   * they need a fresh, honest run to score the config, not a stale result borrowed from a previous version's pass.
+   * Only the request-serving path (scripts/worker.ts) opts in. Use `specId` for a real spec; for free text, hash
+   * the normalized text with `specCacheKey` — the same text can arrive with a different, per-request synthetic id.
+   */
+  cacheKey?: string;
+}
+
+/** Stable key for an exact-match cache lookup on free text: same normalized wording, same key. */
+export function specCacheKey(text: string): string {
+  const normalized = text.trim().toLowerCase().replace(/\s+/g, " ");
+  return createHash("sha1").update(normalized).digest("hex").slice(0, 16);
 }
 
 export interface RunBoardResult {
@@ -73,6 +87,38 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
   const { boardId = randomUUID(), writeMemory = true, useMemory = true } = opts;
   const spec = opts.spec ?? findSpec(specId);
   const checks = await loadChecks();
+  const expectedFor = (circuitJson: unknown) => (opts.expectedFor ? opts.expectedFor(circuitJson) : checks.loadExpected(specId));
+
+  if (opts.cacheKey) {
+    const cached = await col.boards.findOne(
+      { cache_key: opts.cacheKey, harness_version: config.version, passed: true },
+      { sort: { created_at: -1 } },
+    );
+    // harness_version only tracks the config: the checks, normalizer or coder can change under the same version.
+    // Re-grade the stored design against today's checks (no model calls) and serve it only if it still passes.
+    const recheck = cached ? await checks.runChecks(cached.circuit_json, expectedFor(cached.circuit_json), { board_id: boardId, harness_version: config.version }) : null;
+    if (cached && recheck?.passed) {
+      const run: RunResult = { ...recheck, stage: "cache_hit" };
+      await col.runs.replaceOne({ _id: `${boardId}_1` }, run, { upsert: true });
+      // A copy under this request's own board_id, not a pointer to the original: every other view
+      // (`/boards/<id>`, the harness timeline) already assumes one board_id per request.
+      await col.boards.insertOne({
+        board_id: boardId,
+        kind: cached.kind ?? "single",
+        spec_id: specId,
+        harness_version: config.version,
+        source: cached.source ?? "",
+        circuit_json: cached.circuit_json ?? null,
+        passed: true,
+        failures: [],
+        cache_key: opts.cacheKey,
+        cached_from: cached.board_id,
+        created_at: new Date(),
+      });
+      return { specId: spec._id, boardId, attempts: 0, runResult: run, criticResults: [] };
+    }
+  }
+
   const expected = opts.expectedFor ? undefined : checks.loadExpected(specId);
   const completeCritic = createComplete("critic", config);
 
@@ -155,6 +201,7 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
       circuit_json: coderResult?.circuitJson ?? null,
       passed: runResult.passed,
       failures: runResult.failures,
+      ...(opts.cacheKey && { cache_key: opts.cacheKey }),
       created_at: new Date(),
     });
 

@@ -17,13 +17,20 @@ import { defaultWorkerId } from "../apps/worker/src/harness/queue.ts";
 
 // Dynamic imports: scripts/tsconfig.json can't statically walk tscircuit (same as scripts/ablation.ts).
 const load = (p: string) => import(new URL(p, import.meta.url).href);
-const { runBoard } = (await load("../apps/worker/src/agents/coder-loop.ts")) as {
+const { runBoard, specCacheKey } = (await load("../apps/worker/src/agents/coder-loop.ts")) as {
   runBoard: (
     specId: string,
     config: HarnessConfig,
-    opts: { boardId: string; writeMemory: boolean; spec?: { _id: string; text: string; split: "held_out" }; expectedFor?: (cj: unknown) => unknown },
+    opts: {
+      boardId: string;
+      writeMemory: boolean;
+      spec?: { _id: string; text: string; split: "held_out" };
+      expectedFor?: (cj: unknown) => unknown;
+      cacheKey?: string;
+    },
   ) =>
     Promise<{ boardId: string; attempts: number; runResult: { passed: boolean } }>;
+  specCacheKey: (text: string) => string;
 };
 const { runPlannedBoard } = (await load("../apps/worker/src/pipeline/planned-board.ts")) as {
   runPlannedBoard: (boardId: string, spec: { _id: string; text: string }, config: HarnessConfig, deps: unknown) =>
@@ -81,6 +88,8 @@ await serveRequests(
         // prompt write lessons into the shared library.
         spec: { _id: specId, text, split: "held_out" },
         expectedFor: (circuitJson) => genericExpected(circuitJson, text),
+        // Same wording, already verified under this harness version: reuse it instead of designing again.
+        cacheKey: specCacheKey(text),
       });
       await views(boardId, specId);
       return { passed: r.runResult.passed, attempts: r.attempts };
@@ -100,7 +109,7 @@ await serveRequests(
     const boardId = req.board_id ?? `req-${String(req._id).slice(-6)}-${randomUUID().slice(0, 8)}`;
     await setBoard(boardId, config.version);
     // Held-out solutions never enter the library (they'd leak into the ablation).
-    const r = await runBoard(spec._id, config, { boardId, writeMemory: spec.split === "train" });
+    const r = await runBoard(spec._id, config, { boardId, writeMemory: spec.split === "train", cacheKey: spec._id });
     await views(boardId, spec._id);
     return { passed: r.runResult.passed, attempts: r.attempts };
   },
