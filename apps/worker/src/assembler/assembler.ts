@@ -191,19 +191,31 @@ export async function assemble(subcircuits: Subcircuit[], options: AssembleOptio
     };
   });
 
-  const code = [
+  const codeFor = (w: number, h: number) => [
     ...subcircuits.map((s) => s.code.trim()),
     "",
     `export default () => (`,
-    `  <board width="${widthMm}mm" height="${heightMm}mm">`,
+    `  <board width="${w}mm" height="${h}mm">`,
     ...layout.map((p) => `    <group name="${wrapperName(p.name)}" pcbX={${p.pcbX}} pcbY={${p.pcbY}}><${p.exportName} /></group>`),
     `  </board>`,
     `)`,
     "",
   ].join("\n");
 
-  const circuitJson = await evaluateCode(code);
-  const out: AssembleResult = { code, circuitJson, board: { widthMm, heightMm }, layout };
+  let board = { widthMm, heightMm };
+  let code = codeFor(board.widthMm, board.heightMm);
+  let circuitJson = await evaluateCode(code);
+  // Parts without an explicit position can land somewhere else on the assembled board than when measured alone.
+  // If anything sits inside the margin, grow the board (it stays centred) and render once more.
+  const final = partsBox(circuitJson);
+  const needW = Math.ceil(2 * Math.max(Math.abs(final.minX), Math.abs(final.maxX)) + 2 * margin);
+  const needH = Math.ceil(2 * Math.max(Math.abs(final.minY), Math.abs(final.maxY)) + 2 * margin);
+  if (needW > board.widthMm || needH > board.heightMm) {
+    board = { widthMm: Math.max(needW, board.widthMm), heightMm: Math.max(needH, board.heightMm) };
+    code = codeFor(board.widthMm, board.heightMm);
+    circuitJson = await evaluateCode(code);
+  }
+  const out: AssembleResult = { code, circuitJson, board, layout };
   if (options.specId) out.result = await grade(circuitJson, options.specId);
   return out;
 }

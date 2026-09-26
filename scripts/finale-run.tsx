@@ -2,7 +2,8 @@
 // plan -> coder per subcircuit -> route + DRC + interface check -> assemble -> hidden checks -> deliverables.
 //
 //   npm run finale -- --stub            dry run: stand-in planner + coder built from the finale reference (no model calls)
-//   npm run finale                      real run: real planner call + Arjun's runCoder (cheap model)
+//   npm run finale                      real run: planner via the router (createComplete), runCoder per subcircuit,
+//                                       lessons retrieved per subcircuit; models chosen by the current config
 //   npm run finale -- --reset [--stub]  delete this board's queue items, runs and boards first, then run
 //   npm run finale -- --clean [--stub]  only delete this board from Atlas (e.g. before recording), don't run
 //   options: --board <id> (default finale-dry / finale-live), --spec <id> (default finale)
@@ -18,6 +19,8 @@ import { currentConfig } from "../apps/worker/src/harness/config.ts"
 import { runPlannedBoard, type PlannedBoardDeps } from "../apps/worker/src/pipeline/planned-board.ts"
 import { evaluateCircuitSource } from "../apps/worker/src/tools/evaluate.ts"
 import { runCoder } from "../apps/worker/src/agents/coder.ts"
+import { createComplete } from "../apps/worker/src/tools/router.ts"
+import { retrieveLessons } from "../apps/worker/src/harness/memory.ts"
 import { buildDeliverables, writeDeliverables } from "../apps/worker/src/export/deliverables.ts"
 import type { PlannerOutput } from "../apps/worker/src/agents/planner/index.ts"
 
@@ -69,16 +72,7 @@ const stubPlan: PlannerOutput = {
   ],
 }
 
-async function liveComplete(system: string, user: string, schema: unknown) {
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: process.env.PLANNER_MODEL || "google/gemini-3.8-flash", max_tokens: 4000, messages: [{ role: "system", content: system }, { role: "user", content: user }], response_format: { type: "json_schema", json_schema: schema } }),
-  })
-  const json: any = await res.json()
-  if (!res.ok) throw new Error(JSON.stringify(json).slice(0, 300))
-  return JSON.parse(json.choices[0].message.content)
-}
+const config = await currentConfig()
 
 const deps: PlannedBoardDeps = stub
   ? {
@@ -91,10 +85,14 @@ const deps: PlannedBoardDeps = stub
       },
       log,
     }
-  : { planner: { complete: liveComplete }, coder: (input) => runCoder(input) as never, log }
+  : {
+      planner: { complete: createComplete("planner", config) as PlannedBoardDeps["planner"]["complete"] },
+      coder: (input) => runCoder(input) as never,
+      lessons: (query) => retrieveLessons(query, config.context) as never,
+      log,
+    }
 
-const config = await currentConfig()
-log(`${boardId}: spec ${specId}, harness v${config.version}, ${stub ? "stand-in planner + coder" : "live planner + coder"}`)
+log(`${boardId}: spec ${specId}, harness v${config.version}, ${stub ? "stand-in planner + coder" : `live: planner ${config.routing.planner}, coder ${config.routing.coder}`}`)
 const { progress, final } = await runPlannedBoard(boardId, spec, config, deps)
 log(`queue: ${progress.done}/${progress.total} done, ${progress.failed} failed, ${progress.pending} pending`)
 for (const i of progress.items) if (i.status !== "done") log(`  ${i.key} ${i.status}: ${i.error ?? ""}`)
