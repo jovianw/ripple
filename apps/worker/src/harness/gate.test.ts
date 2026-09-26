@@ -65,7 +65,27 @@ const cfg = (over: Partial<StoredConfig>): StoredConfig => ({ ...BASELINE, ...ov
 const noBatch: RunBatch = () => {
   throw new Error("runBatch should not have been called")
 }
-const store = (harness: GateStore["harness"]): GateStore => ({ harness, runs: {} as GateStore["runs"] })
+const store = (harness: GateStore["harness"], runs: GateStore["runs"] = {} as GateStore["runs"]): GateStore => ({ harness, runs })
+
+/** In-memory `runs` that answers scoreVersion's aggregate the way Mongo would. */
+function fakeRuns(rows: Pick<StoredRun, "board_id" | "harness_version" | "stage" | "passed" | "cost_usd">[]): GateStore["runs"] {
+  return {
+    aggregate(pipeline: { $match?: { harness_version: number; board_id?: { $in: string[] } } }[]) {
+      const m = pipeline[0].$match!
+      const rs = rows.filter((r) => r.harness_version === m.harness_version && (!m.board_id || m.board_id.$in.includes(r.board_id)))
+      const boards = new Map<string, typeof rs>()
+      for (const r of rs) boards.set(r.board_id, [...(boards.get(r.board_id) ?? []), r])
+      const per = [...boards.values()].map((list) => ({
+        passed: list.some((r) => r.passed) ? 1 : 0,
+        attempts: list.filter((r) => r.stage === "checks").length,
+        cost: list.reduce((s, r) => s + (r.cost_usd ?? 0), 0),
+      }))
+      const avg = (k: "passed" | "attempts" | "cost") => per.reduce((s, b) => s + b[k], 0) / per.length
+      const out = per.length ? [{ boards: per.length, checks_passed: avg("passed"), attempts_per_board: avg("attempts"), cost_per_board_usd: avg("cost") }] : []
+      return { toArray: async () => out }
+    },
+  } as unknown as GateStore["runs"]
+}
 
 describe("evaluatePending concurrency", () => {
   test("two concurrent callers never both claim and decide the same pending version", async () => {
@@ -136,5 +156,30 @@ describe("evaluatePending concurrency", () => {
     assert.match(lost.reasons.join(" "), new RegExp(`stale: .* v${kept.version} is current`))
     assert.equal((await harness.findOne({ version: 0 }))?.succeeded_by, kept.version)
     assert.equal((await harness.findOne({ verdict: "kept" }, { sort: { version: -1 } }))?.version, kept.version)
+  })
+})
+
+describe("evaluatePending parent scoring", () => {
+  const run = (board_id: string, harness_version: number, passed: boolean, cost_usd = 0.01) => ({ board_id, harness_version, stage: "checks", passed, cost_usd })
+  const seed = () => [
+    cfg({ version: 0, parent: null, verdict: "kept", scores: { checks_passed: 0, attempts_per_board: 2.5, cost_per_board_usd: 0.002 } }),
+    cfg({ version: 1, parent: 0, verdict: "pending", rules: ["new rule"] }),
+  ]
+  // Tonight's parent batch: 2/2 passed. The candidate: 1/2. The stored v0 scores (0%) are from an older round.
+  const runs = fakeRuns([run("p1", 0, true), run("p2", 0, true), run("c1", 1, true), run("c2", 1, false)])
+  const batch: RunBatch = async () => ({ boardIds: ["c1", "c2"] })
+
+  test("with parentBoardIds the parent is scored from that batch, not its stale stored scores", async () => {
+    const harness = fakeHarness(seed())
+    const decision = await evaluatePending(batch, { store: store(harness, runs), parentBoardIds: ["p1", "p2"] })
+    assert.equal(decision?.verdict, "rolled_back")
+    assert.match(decision!.reasons[0], /v1 pass 50%.*vs v0 pass 100%/)
+    assert.equal((await harness.findOne({ version: 0 }))!.scores!.checks_passed, 1)
+  })
+
+  test("without parentBoardIds the stored parent scores are used", async () => {
+    const decision = await evaluatePending(batch, { store: store(fakeHarness(seed()), runs) })
+    assert.equal(decision?.verdict, "kept")
+    assert.match(decision!.reasons[0], /vs v0 pass 0%/)
   })
 })
