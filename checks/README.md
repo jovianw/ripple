@@ -75,3 +75,12 @@ resistor) fails on the right check.
 `reference.test.tsx` renders the reference board in [reference/](reference/) for every spec and asserts it
 passes that spec's checks with 0 DRC errors, so every spec is known to be solvable with whitelisted parts.
 Typecheck this folder with `npx tsc -p checks`.
+
+## Free-text specs
+
+`genericExpected(circuitJson, specText?)` (`generic.ts`) derives checks from what the board contains, for prompts with
+no spec file: every chip supply decoupled within 3mm (1uF for a regulator), supply not shorted to ground, I2C buses
+(where an I2C device sits) pulled up 2.2k-10k, every LED with its own resistor, address/WP/CS pins and regulator EN
+tied, USB-C CC pull-downs, MCU reset pulled up, and every header label the prompt names present and wired.
+`generic.test.tsx`: all reference boards pass; a missing cap, missing pull-ups, an LED without a resistor, and a
+missing header label each fail.
