@@ -13,9 +13,11 @@
     "setup:indexes": "tsx --env-file-if-exists=.env scripts/setup-indexes.ts",
     "seed:config": "tsx --env-file-if-exists=.env scripts/seed-config.ts",
     "green": "tsx --env-file-if-exists=.env scripts/green-check.ts",
+    "queue:demo": "tsx --env-file-if-exists=.env scripts/queue-demo.ts",
     "smoke": "tsx scripts/smoke-board.tsx",
     "verify:parts": "tsx scripts/verify-parts.tsx",
     "test:checks": "TSX_TSCONFIG_PATH=checks/tsconfig.json tsx --test checks/**/*.test.tsx",
+    "test:assembler": "tsx --test apps/worker/src/assembler/assembler.test.ts",
     "try:critic": "tsx --env-file-if-exists=.env scripts/try-critic.tsx",
     "test:planner": "tsx --test apps/worker/src/agents/planner/planner.test.tsx",
     "try:planner": "tsx --env-file-if-exists=.env scripts/try-planner.ts"
