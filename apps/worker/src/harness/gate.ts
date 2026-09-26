@@ -199,12 +199,17 @@ export async function evaluatePending(
     if (violations.length)
       return await record({ version: candidate.version, parent: parent.version, verdict: "rejected", reasons: violations });
 
-    let parentScores = (parent.scores as Scores | undefined) ?? undefined;
-    if (!parentScores) {
-      const reused = opts.parentBoardIds?.length
-        ? await scoreVersion(parent.version, { boardIds: opts.parentBoardIds, store })
-        : null;
-      parentScores = reused ?? (await runAndScore(parent, runBatch, store));
+    // Prefer the batch just run under the parent: its stored scores may be from an earlier round with different
+    // specs (v0's first scores came from two boards), and comparing a fresh candidate against them is not a fair test.
+    const fresh = opts.parentBoardIds?.length ? await scoreVersion(parent.version, { boardIds: opts.parentBoardIds, store }) : null;
+    let parentScores: Scores;
+    if (fresh) {
+      parentScores = fresh;
+      await store.harness.updateOne({ version: parent.version }, { $set: { scores: stripBoards(parentScores) } });
+    } else if (parent.scores) {
+      parentScores = parent.scores as Scores;
+    } else {
+      parentScores = await runAndScore(parent, runBatch, store);
       await store.harness.updateOne({ version: parent.version }, { $set: { scores: stripBoards(parentScores) } });
     }
     const scores = await runAndScore(candidate, runBatch, store);

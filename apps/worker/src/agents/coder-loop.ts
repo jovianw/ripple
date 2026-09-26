@@ -5,7 +5,7 @@
 // scoring, not necessarily the current kept one.
 import { createHash, randomUUID } from "node:crypto";
 import type { BoardMetrics, HarnessConfig, RunResult, Spec } from "@ripple/types";
-import { retrieveLessons, retrieveSubcircuits, addLesson, addSubcircuit, markLessonsHelped, markSubcircuitsReused } from "../harness/memory.js";
+import { retrieveLessons, retrieveSubcircuits, addLesson, addSubcircuit, markLessonsHelped, markSubcircuitsReused, indexFailure } from "../harness/memory.js";
 import { col } from "../db.js";
 import { createComplete } from "../tools/router.js";
 import { runCoder, CoderCompileError, type CoderResult } from "./coder.js";
@@ -261,6 +261,12 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
   }
 
   if (!runResult) throw new Error(`runBoard(${specId}) produced no result`);
+
+  // Episodic memory: a failed board becomes searchable by what went wrong (memory.similarFailures).
+  if (!runResult.passed && writeMemory && runResult.failures.length) {
+    const summary = `${specId}: ${runResult.failures.slice(0, 6).map((f) => `${f.check}: ${f.detail}`).join(" | ")}`.slice(0, 800);
+    await indexFailure(`${boardId}_${attempts}`, summary).catch((err) => console.warn(`indexFailure skipped: ${(err as Error).message}`));
+  }
 
   if (runResult.passed && coderResult && writeMemory) {
     await addSubcircuit({
