@@ -31,11 +31,11 @@ export const usbCSink = (vbus: string): ExpectedChecks => ({
   separate: [[`${USB}.CC1`, `${USB}.CC2`], [`${USB}.VBUS`, "header:GND"]],
 })
 
-/** 3.3V LDO from `vin` to header 3V3, with >=1uF caps within 3mm of VIN and VOUT. */
-export const ldo3v3 = (vin: string): ExpectedChecks => ({
+/** 3.3V LDO from `vin` to the 3.3V rail `vout`, with >=1uF caps within 3mm of VIN and VOUT. */
+export const ldo3v3 = (vin: string, vout = "header:3V3"): ExpectedChecks => ({
   nets: [
     { name: "LDO_IN", pins: ["role:ldo_3v3.VIN", vin] },
-    { name: "3V3", pins: ["role:ldo_3v3.VOUT", "header:3V3"] },
+    { name: "3V3", pins: ["role:ldo_3v3.VOUT", vout] },
     { name: "GND", pins: ["role:ldo_3v3.GND", "header:GND"] },
   ],
   tied: [{ label: "regulator enable", pin: "role:ldo_3v3.EN", one_of: [vin], optional: true }],
@@ -74,8 +74,8 @@ export const i2c = (devices: string[], sda: string, scl: string, vcc: string): E
 })
 
 /** Address pins tied to a rail, not floating. */
-export const addressPins = (chip: string, pins: string[]): ExpectedChecks => ({
-  tied: pins.map((p) => ({ label: `${chip} ${p}`, pin: `${chip}.${p}`, one_of: ["header:3V3", "header:GND"], optional: true })),
+export const addressPins = (chip: string, pins: string[], rail = "header:3V3"): ExpectedChecks => ({
+  tied: pins.map((p) => ({ label: `${chip} ${p}`, pin: `${chip}.${p}`, one_of: [rail, "header:GND"], optional: true })),
 })
 
 /** MCU basics: decoupled supply, reset pulled up (10k-100k), status LED on a GPIO. */

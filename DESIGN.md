@@ -240,7 +240,8 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 - [ ] **12:30–1:30** Critic agent (code and prompt) and lesson extraction into Atlas
 - [ ] **1:30–2:30** Planner agent and assembler
 - [x] Parts whitelist (`parts/whitelist.json` v2, `npm run verify:parts`)
-- [ ] **2:30–3:30** Finale board spec, checks, first full run
+- [x] Finale board spec (`specs/finale.json`), checks, and 20-part reference board in three groups (`npm run smoke finale`)
+- [ ] **2:30–3:30** Finale first full run through the work queue
 - [ ] Present the live demo
 
 ### Jovian: harness core and memory
