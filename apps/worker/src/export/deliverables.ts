@@ -189,6 +189,49 @@ const MIME: Record<string, string> = {
   kicad_pcb: "text/plain", kicad_sch: "text/plain", kicad_pro: "application/json",
 }
 
+// Chips carry their manufacturer part number (parts/whitelist.json) so they can be sourced.
+const bomRows = (json: AnyCircuitElement[]) =>
+  convertCircuitJsonToBomRows({
+    circuitJson: json,
+    resolvePart: async ({ source_component }) => {
+      const mpn = (source_component as { manufacturer_part_number?: string }).manufacturer_part_number
+      return mpn ? { manufacturer_mpn_pairs: [{ manufacturer: "", mpn }] } : null
+    },
+  })
+
+const netlistCsv = (json: AnyCircuitElement[]) =>
+  ["net,pins", ...netlistRows(json).map((r) => `${csvCell(r.net)},${csvCell(r.pins.join(" "))}`)].join("\n") + "\n"
+
+/** What the web app shows for any board: text files only, small enough to store on the board's Atlas record. */
+export interface BoardViews {
+  manifest: Deliverables["manifest"]
+  files: { path: string; content: string }[]
+}
+
+/**
+ * The web app's view of a board: PCB and schematic images, BOM and netlist, with a manifest in the same shape as
+ * buildDeliverables'. No Gerbers, KiCad, 3D or PNGs: those stay with `npm run export`. A failing view is left out.
+ */
+export async function buildBoardViews(json: AnyCircuitElement[], name: string, specId?: string): Promise<BoardViews> {
+  const made: { path: string; category: Category; description: string; content: string }[] = []
+  const add = async (path: string, category: Category, description: string, make: () => string | Promise<string>) => {
+    try { made.push({ path, category, description, content: await make() }) } catch { /* left out of the manifest */ }
+  }
+  await add("images/pcb.svg", "image", "PCB layout, top view", () => convertCircuitJsonToPcbSvg(json))
+  await add("images/schematic.svg", "image", "Schematic", () => convertCircuitJsonToSchematicSvg(json))
+  await add("assembly/bom.csv", "assembly", "Bill of materials with manufacturer part numbers", async () => convertBomRowsToCsv(await bomRows(json)))
+  await add("netlist.csv", "data", "Every net and the component pins on it", () => netlistCsv(json))
+  return {
+    manifest: {
+      name, spec_id: specId, generated_at: new Date().toISOString(), metrics: boardMetrics(json),
+      files: made.map(({ path, category, description, content }) => ({
+        path, category, description, mime: MIME[path.split(".").pop()!] ?? "text/plain", bytes: Buffer.byteLength(content),
+      })),
+    },
+    files: made.map(({ path, content }) => ({ path, content })),
+  }
+}
+
 function png(svg: string, width = 1600): Uint8Array {
   return new Resvg(svg, { fitTo: { mode: "width", value: width }, background: "#ffffff" }).render().asPng()
 }
@@ -216,14 +259,7 @@ export async function buildDeliverables(input: DeliverablesInput): Promise<Deliv
 
   let bom: BomRow[] | undefined
   await attempt("assembly/bom.csv", async () => {
-    bom = await convertCircuitJsonToBomRows({
-      circuitJson: json,
-      // Chips carry their manufacturer part number (parts/whitelist.json) so they can be sourced.
-      resolvePart: async ({ source_component }) => {
-        const mpn = (source_component as { manufacturer_part_number?: string }).manufacturer_part_number
-        return mpn ? { manufacturer_mpn_pairs: [{ manufacturer: "", mpn }] } : null
-      },
-    })
+    bom = await bomRows(json)
     add("assembly/bom.csv", "assembly", "Bill of materials with manufacturer part numbers", convertBomRowsToCsv(bom))
   })
   await attempt("assembly/pnp.csv", () => add("assembly/pnp.csv", "assembly", "Pick-and-place: component positions and rotations", convertCircuitJsonToPickAndPlaceCsv(json)))
@@ -259,8 +295,7 @@ export async function buildDeliverables(input: DeliverablesInput): Promise<Deliv
     add("images/schematic.png", "image", "Schematic (PNG)", png(schSvg))
   })
 
-  add("netlist.csv", "data", "Every net and the component pins on it",
-    ["net,pins", ...netlistRows(json).map((r) => `${csvCell(r.net)},${csvCell(r.pins.join(" "))}`)].join("\n") + "\n")
+  add("netlist.csv", "data", "Every net and the component pins on it", netlistCsv(json))
   await attempt(`simulation/${name}.cir`, () =>
     add(`simulation/${name}.cir`, "simulation", "SPICE netlist of the passive network (resistors, capacitors, LEDs)", convertSpiceNetlistToString(circuitJsonToSpice(json))))
 

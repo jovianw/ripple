@@ -4,7 +4,7 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import { RootCircuit } from "tscircuit"
 import { FinaleReference } from "../../../../checks/reference/finale.tsx"
-import { buildDeliverables, zipDeliverables, zipFabrication } from "./deliverables.ts"
+import { buildBoardViews, buildDeliverables, zipDeliverables, zipFabrication } from "./deliverables.ts"
 
 test("finale exports every deliverable", async () => {
   const c = new RootCircuit()
@@ -30,4 +30,25 @@ test("finale exports every deliverable", async () => {
   assert.equal(d.manifest.metrics.components, 20)
   assert.ok(zipDeliverables(d, "finale").byteLength > 0)
   assert.equal(Object.keys(d.files).filter((p) => p.startsWith("fabrication/")).length > 0 && zipFabrication(d).byteLength > 0, true)
+})
+
+test("board views: PCB and schematic SVG, BOM and netlist, with a manifest that lists exactly those", async () => {
+  const c = new RootCircuit()
+  c.add(<FinaleReference />)
+  await c.renderUntilSettled()
+  const v = await buildBoardViews(c.getCircuitJson(), "req-abc123", "adhoc-abc123")
+  const paths = v.files.map((f) => f.path)
+  assert.deepEqual(paths, ["images/pcb.svg", "images/schematic.svg", "assembly/bom.csv", "netlist.csv"])
+  assert.deepEqual(v.manifest.files.map((f) => f.path), paths)
+  const file = (p: string) => v.files.find((f) => f.path === p)!.content
+  assert.match(file("images/pcb.svg"), /^<svg/)
+  // The schematic carries part names and pin labels as text.
+  assert.match(file("images/schematic.svg"), /<text[^>]*>U2</)
+  assert.match(file("assembly/bom.csv"), /"U2","ATtiny85-20SU"/)
+  assert.equal(v.manifest.name, "req-abc123")
+  assert.equal(v.manifest.spec_id, "adhoc-abc123")
+  assert.equal(v.manifest.metrics.components, 20)
+  assert.equal(v.manifest.files.find((f) => f.path === "images/pcb.svg")!.mime, "image/svg+xml")
+  // Small enough to live on the board's Atlas record (16MB document limit).
+  assert.ok(JSON.stringify(v).length < 2_000_000, `${JSON.stringify(v).length} bytes`)
 })

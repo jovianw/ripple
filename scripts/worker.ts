@@ -41,6 +41,10 @@ const { runPlannedBoard } = (await load("../apps/worker/src/pipeline/planned-boa
 const { liveDeps } = (await load("../apps/worker/src/pipeline/live-deps.ts")) as {
   liveDeps: (spec: { _id: string; text: string }, boardId: string, config: HarnessConfig, log?: (m: string) => void) => unknown;
 };
+// Marcos's board views (PCB/schematic SVG, BOM, netlist) for the web app's deliverables panel.
+const { saveBoardViews } = (await load("../apps/worker/src/export/board-views.ts")) as {
+  saveBoardViews: (boardId: string, specId?: string) => Promise<string[] | null>;
+};
 const checks = (await load("../checks/index.ts")) as { genericExpected?: (circuitJson: unknown, specText?: string) => unknown };
 // Free text has no hidden-check file: Marcos's generic checks are built from the board and the spec text
 // (header labels come from the text). DRC only if checks/ doesn't export them.
@@ -49,6 +53,14 @@ const genericExpected = (circuitJson: unknown, text: string) => checks.genericEx
 const SPECS = specs as { _id: string; split: string; text: string }[];
 const log = (m: string) => console.log(`${new Date().toISOString().slice(11, 19)} ${m}`);
 const concurrency = Math.max(1, Number(process.env.WORKER_CONCURRENCY) || 3);
+/** The web panel's views for a finished board. Never fails the request: the board itself is already stored. */
+const views = async (boardId: string, specId?: string) => {
+  try {
+    if (!(await saveBoardViews(boardId, specId))) log(`views ${boardId}: no rendered attempt`);
+  } catch (err) {
+    log(`views ${boardId}: ${err instanceof Error ? err.message : err}`);
+  }
+};
 
 await connect();
 const stop = new AbortController();
@@ -79,6 +91,7 @@ await serveRequests(
         // Same wording, already verified under this harness version: reuse it instead of designing again.
         cacheKey: specCacheKey(text),
       });
+      await views(boardId, specId);
       return { passed: r.runResult.passed, attempts: r.attempts };
     }
 
@@ -86,6 +99,7 @@ await serveRequests(
       const boardId = `finale-req-${String(req._id).slice(-6)}`;
       await setBoard(boardId, config.version);
       const { final, progress } = await runPlannedBoard(boardId, finaleSpec, config, liveDeps(finaleSpec, boardId, config, log));
+      await views(boardId, finaleSpec._id);
       return { passed: !!final?.passed, attempts: progress.done };
     }
 
@@ -96,6 +110,7 @@ await serveRequests(
     await setBoard(boardId, config.version);
     // Held-out solutions never enter the library (they'd leak into the ablation).
     const r = await runBoard(spec._id, config, { boardId, writeMemory: spec.split === "train", cacheKey: spec._id });
+    await views(boardId, spec._id);
     return { passed: r.runResult.passed, attempts: r.attempts };
   },
   { log, signal: stop.signal, concurrency },

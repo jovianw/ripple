@@ -34,6 +34,8 @@ export interface DeliverableManifest {
     trace_mm: number;
   };
   files: DeliverableFile[];
+  /** Views the worker built for this board (from Atlas): no download bundle. */
+  live?: boolean;
 }
 
 export const manifestUrl = (boardId: string) =>
