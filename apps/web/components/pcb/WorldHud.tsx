@@ -47,22 +47,22 @@ export function WorldHud({
         {snapshot.message}
       </div>
 
-      <div className="mt-1.5 flex items-baseline gap-2 text-[12px] text-faint">
+      <div className="mt-1.5 flex items-baseline gap-2 text-[12px] text-dim">
         <span>{AGENT_LABEL[snapshot.agent] ?? snapshot.agent}</span>
-        <span className="text-ghost">·</span>
+        <span className="text-faint">·</span>
         <span className="font-mono [font-variant-numeric:tabular-nums]">
           {String(snapshot.version + 1).padStart(2, "0")} / {totalSteps}
         </span>
         {snapshot.summary?.[1] ? (
           <>
-            <span className="text-ghost">·</span>
+            <span className="text-faint">·</span>
             <span className="font-mono">{snapshot.summary[1]}</span>
           </>
         ) : null}
       </div>
 
       {/* One hairline of progress, no track chrome. */}
-      <div className="mt-3 h-px w-40 bg-hair">
+      <div className="mt-3 h-px w-40 bg-white/15">
         <div
           className={`h-px transition-[width] duration-500 ease-out ${rule}`}
           style={{ width: `${Math.round(progress * 100)}%` }}

@@ -18,7 +18,16 @@ interface RequestState {
 
 const POLL_MS = 2000;
 
-export function RealBuildStatus({ requestId, note }: { requestId: string | null; note: string | null }) {
+export function RealBuildStatus({
+  requestId,
+  note,
+  onBoard,
+}: {
+  requestId: string | null;
+  note: string | null;
+  /** Fired once, when the worker's board for this request exists. */
+  onBoard?: (boardId: string) => void;
+}) {
   const [req, setReq] = useState<RequestState | null>(null);
 
   useEffect(() => {
@@ -29,7 +38,10 @@ export function RealBuildStatus({ requestId, note }: { requestId: string | null;
       const json = (await r?.json().catch(() => null)) as RequestState | null;
       if (stopped || !json || !("status" in json)) return;
       setReq(json);
-      if (json.status === "done" || json.status === "failed") stopped = true;
+      if (json.status === "done" || json.status === "failed") {
+        stopped = true;
+        if (json.status === "done" && json.board_id) onBoard?.(json.board_id);
+      }
     };
     const first = setTimeout(poll, 0);
     const timer = setInterval(() => !stopped && poll(), POLL_MS);
@@ -38,7 +50,7 @@ export function RealBuildStatus({ requestId, note }: { requestId: string | null;
       clearTimeout(first);
       clearInterval(timer);
     };
-  }, [requestId]);
+  }, [requestId, onBoard]);
 
   if (!requestId) return note ? <p className="mt-1 text-[11px] text-faint">{note}</p> : null;
 

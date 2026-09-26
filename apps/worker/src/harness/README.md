@@ -74,7 +74,7 @@ const next = await propose(
 ```
 
 Verdicts: `"kept"` (current if newest), `"pending"` (proposed, not yet scored), `"rolled_back"` (scored worse),
-`"rejected"` (breaks a guardrail). `harness/gate.ts` sets them (below); proposals stay `pending` and `currentConfig()`
+`"rejected"` (breaks a guardrail, or stale: its parent is no longer current). `harness/gate.ts` sets them (below); proposals stay `pending` and `currentConfig()`
 doesn't change until the gate runs.
 
 ## `harness/gate.ts`: scoring and the config gate
@@ -85,7 +85,7 @@ the UI.
 | Function | Who calls it | Notes |
 |---|---|---|
 | `scoreVersion(version, { boardIds? })` → `Scores \| null` | ablation, UI, gate | From `runs` with that `harness_version`. Per board: passed if any attempt passed; attempts = runs with `stage: "checks"`; cost = sum of every run's `cost_usd`. Averaged over boards: `{ checks_passed, attempts_per_board, cost_per_board_usd, boards }`. `checks_passed` is the share of boards that passed all hidden checks. |
-| `evaluatePending(runBatch)` → `GateDecision \| null` | meta-agent loop, after each `propose()` | Takes the oldest `pending` version. Guardrail violation → `"rejected"` with no batch run. Otherwise runs a batch under the parent (only if it has no scores yet) and under the candidate, then `"kept"` if `isBetter`, else `"rolled_back"`. Stores `scores`, `verdict`, `gate_note`, `decided_at` on the version. `null` when nothing is pending. |
+| `evaluatePending(runBatch)` → `GateDecision \| null` | meta-agent loop, after each `propose()` | Claims the oldest `pending` version nobody else holds (`claimed_by`/`claimed_at`; a claim older than 20 min is retaken), so concurrent `evolve` runs never decide the same version. Parent no longer current, or guardrail violation → `"rejected"` with no batch run. Otherwise runs a batch under the parent (only if it has no scores yet) and under the candidate, then `"kept"` if `isBetter`, else `"rolled_back"`. Only one child is kept per parent (`succeeded_by` on the parent, set atomically); a sibling that also scored better is `"rejected"` as stale. Stores `scores`, `verdict`, `gate_note`, `decided_at` on the version. `null` when nothing claimable is pending. |
 | `guardrailViolations(parent, candidate)` → `string[]` | gate, meta-agent (to pre-check) | Rejects: removing an existing rule; turning off `route_requires_connectivity`; changing `parts_whitelist`; any MCP tools for the coder; non-read-only MCP tools for anyone; `repair_budget` outside 1..6; `split_over_parts` below 4; `lessons_k`/`subcircuits_k` outside 0..10. |
 | `isBetter(candidate, parent)` | gate | More boards passing wins; tie → fewer attempts; tie → lower cost. |
 

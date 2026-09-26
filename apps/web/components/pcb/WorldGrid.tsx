@@ -4,8 +4,8 @@ import { Grid } from "@react-three/drei";
 
 /**
  * CAD reference plane. Sits below the board so the board reads as hovering in
- * a workspace, and fades out well before the horizon so it never competes with
- * the copper.
+ * a workspace, and fades toward the horizon so it gives depth without competing
+ * with the copper.
  */
 export function WorldGrid() {
   return (
@@ -14,13 +14,13 @@ export function WorldGrid() {
       args={[80, 80]}
       infiniteGrid
       cellSize={1}
-      cellThickness={0.5}
-      cellColor="#1b2530"
+      cellThickness={0.7}
+      cellColor="#3a4459"
       sectionSize={5}
-      sectionThickness={0.8}
-      sectionColor="#24323f"
-      fadeDistance={36}
-      fadeStrength={2.2}
+      sectionThickness={1.2}
+      sectionColor="#52607c"
+      fadeDistance={60}
+      fadeStrength={1.4}
       fadeFrom={0}
     />
   );

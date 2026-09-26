@@ -13,10 +13,10 @@ function Stat({
 }) {
   return (
     <span className="whitespace-nowrap">
-      <span className="text-[11px] text-faint">{label} </span>
+      <span className="text-[11px] text-dim">{label} </span>
       <span
         className={`font-mono text-[12px] [font-variant-numeric:tabular-nums] ${
-          alert ? "text-bad" : "text-dim"
+          alert ? "text-bad" : "text-ink"
         }`}
       >
         {value}
