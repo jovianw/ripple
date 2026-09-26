@@ -7,8 +7,8 @@ export { CRITIC_SYSTEM, CRITIC_SCHEMA, criticUserPrompt, compactWhitelist, type 
 export interface CriticDeps {
   /** Calls the critic's model with a JSON schema; returns the parsed JSON. */
   complete(system: string, user: string, schema: typeof CRITIC_SCHEMA): Promise<unknown>
-  /** Stores a lesson (memory.addLesson); returns its id. */
-  addLesson(lesson: { pattern: string; fix: string }): Promise<string>
+  /** Stores a lesson (memory.addLesson); returns its id. Omit when the run must not write memory (free text from the web). */
+  addLesson?(lesson: { pattern: string; fix: string }): Promise<string>
 }
 
 export interface CriticResult extends CriticOutput {
@@ -48,12 +48,17 @@ export async function runCritic(input: CriticInput, deps: CriticDeps): Promise<C
     rejected.push(...keep.map((l) => ({ ...l, reason: "held-out spec" })))
     keep = []
   }
+  // No storage: the caller's board must not teach (ungraded free text); keep the diagnosis, drop the lessons.
+  if (!deps.addLesson) {
+    rejected.push(...keep.map((l) => ({ ...l, reason: "memory writes off" })))
+    keep = []
+  }
   keep = keep.filter((l) => {
     const why = lessonProblem(l)
     if (why) rejected.push({ ...l, reason: why })
     return !why
   })
   const saved = []
-  for (const l of keep) saved.push(await deps.addLesson(l))
+  for (const l of keep) saved.push(await deps.addLesson!(l))
   return { ...out, lessons: keep, rejected_lessons: rejected, saved_lesson_ids: saved }
 }
