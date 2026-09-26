@@ -251,6 +251,10 @@ Time & What landed on \code{main} \\
 13:07 & Front end reads Atlas; single-board Circuit JSON; honest ablation cost \\
 13:25 & Lesson review: 3 of 12 retired; critic prompt and gate tightened \\
 13:31 & Spec requests worker with change stream; lesson dedupe at 0.965 \\
+15:33 & Meta-agent given failure causes; failed runs indexed; retired lessons stay retired \\
+15:37 & Evolve round two: v2 with five rules kept \\
+15:42 & Evolve round three: 7 of 8 training specs pass under v2; v3 rejected by the guardrail \\
+15:50 & Ablation on held-out specs: bare 0 of 4, v0 2 of 4, v2 3 of 4 \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -277,26 +281,30 @@ Config changes kept, rolled back, rejected & \code{harness\_versions} \\
 
 \begin{itemize}
   \item \textbf{Checkpoint.} One training spec goes from text to a routed board that passes its hidden checks on the first attempt with the cheap model, under a stored config version.
-  \item \textbf{Gate.} The first evolve round on two training specs: v0 passed 0 of 2; the meta-agent proposed routing the coder to the strong model; the candidate also passed 0 of 2 at 37 times the cost per board, and the gate rolled it back. The critic wrote 12 lessons during the round.
-  \item \textbf{Lessons.} After review, 9 active lessons remain, covering I2C pull-ups, address pins, write-protect, supply and capacitor wiring, decoupling distance and courtyard-aware placement.
+  \item \textbf{Gate, round one.} On two training specs: v0 passed 0 of 2; the meta-agent proposed routing the coder to the strong model; the candidate also passed 0 of 2 at 37 times the cost per board, and the gate rolled it back. The critic wrote 12 lessons during the round.
+  \item \textbf{Gate, round two.} After the meta-agent was given failure details, the critic's diagnoses and the batch's lessons (D10 and D14), it proposed v2: five rules promoted from the most common causes (connect every required port pair on one net; explicit coordinates with 2\,mm courtyard spacing; a series resistor on every LED; 5.1\,k CC pull-downs on USB-C sinks; decoupling within 3\,mm pad to pad). On the eight training specs v0 passed 4 of 8 and v2 passed 4 of 8 with fewer attempts and lower cost, so the gate kept v2.
+  \item \textbf{Gate, round three.} Under v2 the training batch passed 7 of 8. The meta-agent proposed v3, a rewording of the spacing rule to measure from courtyard boundaries. Because the rewording replaced an existing rule, the guardrail counted it as removing one and rejected v3 without spending a batch. The history now holds a kept, a rolled-back and a rejected change.
+  \item \textbf{Lessons.} After the first review, 9 active lessons remained. By the end of the day the critic had written 60, of which 43 are active; the retired ones stay retired even when the critic re-learns them.
   \item \textbf{Long horizon.} The finale board built through the queue, was killed mid-step, resumed, assembled, passed every hidden check, and produced 30 deliverable files.
 \end{itemize}
 
 \subsection{Ablation}
 
-The ablation runs the same model on the four held-out specs under three conditions, with memory writes off so held-out solutions never enter the library. The table is produced by \code{npm run ablation} and is to be filled from that run.
+The ablation runs the same cheap model (GPT-4o-mini) on the four held-out specs (\code{h01} USB-C humidity node, \code{h02} MCU temperature logger, \code{h03} RC low-pass, \code{h04} dual LED driver) under three conditions, with memory writes off so held-out solutions never enter the library. Produced by \code{npm run ablation} at 15:50 on the day, after two evolve rounds.
 
 \begin{center}
 \begin{tabular}{@{}L{6.5cm}L{2.6cm}L{2.6cm}L{2.6cm}@{}}
 \toprule
 Setup & Checks passed & Attempts per board & Cost per board \\
 \midrule
-Bare model, no harness & & & \\
-Harness v0: loop and checks, no memory & & & \\
-Harness vN: evolved config, library, lessons & & & \\
+Bare model, no harness & 0 of 4 & 1.00 & \$0.0001 \\
+Harness v0: loop and checks, no memory & 2 of 4 & 2.75 & \$0.0503 \\
+Harness v2: evolved config, library, lessons & 3 of 4 & 2.75 & \$0.0462 \\
 \bottomrule
 \end{tabular}
 \end{center}
+
+The bare model never produced a board that passed: on held-out specs it invented elements such as \code{<usb>}, \code{<power>} and \code{<pin>} that tscircuit does not have, so most attempts did not even render. The v0 harness, with the loop, the checker and the critic but no learned memory, passed half. The evolved v2, with five learned rules, the subcircuit library and the lessons, passed three of four at a slightly lower cost per board: it additionally solved the MCU temperature logger, which v0 had failed. The remaining failure under both harness versions was the USB-C humidity node, the largest held-out board.
 
 \subsection{Risks that materialised}
 
@@ -305,12 +313,14 @@ Harness vN: evolved config, library, lessons & & & \\
   \item A learned lesson was wrong and harmful until reviewed (D10).
   \item Windows checkouts with CRLF line endings broke the finale reference parser and the assembler; fixed with \code{.gitattributes}.
   \item The pinned autorouter occasionally crashes on a re-render in one process; tests pin only the deterministic netlist rules to exact results.
-  \item The meta-agent's batch summary counted failures by check name only, so it could not see that courtyard overlaps were the cause of skipped autorouting; the fix is to give it the top failure details and the critic's lessons.
+  \item The meta-agent's batch summary counted failures by check name only, so it could not see that courtyard overlaps were the cause of skipped autorouting; once it was given the top failure details and the critic's lessons it proposed rules instead of model swaps.
+  \item The config gate compared a candidate against its parent's stored scores even when a fresh parent batch had just run, so v2 was first judged against v0's stale morning numbers; fixed to prefer the fresh batch, and v2 still won on the fair comparison.
+  \item A retired lesson came back the moment the critic re-learned the same pattern, and the duplicate check ignored retired lessons; fixed so review decisions stick.
 \end{itemize}
 
 \section{Limitations and what we would do next}
 
-Passing the checks proves spec and rule compliance, not that a board works; nothing here replaces a review by an engineer before ordering. The domain is deliberately narrow: two layers, about 20 parts, no high-speed or signal-integrity concerns. The meta-agent so far proposes one change per round and has been better at proposing model changes than rules; feeding it failure details and lessons is the obvious next step. The Strands Harness Optimizer would be a fair external baseline for the context-tuning part of what Ripple does. And the ablation, the single most persuasive artifact, needs its numbers.
+Passing the checks proves spec and rule compliance, not that a board works; nothing here replaces a review by an engineer before ordering. The domain is deliberately narrow: two layers, about 20 parts, no high-speed or signal-integrity concerns. The meta-agent proposes one change per round; once it was given failure details and lessons it proposed rules rather than model changes, and the guardrail's strictness about rewording a rule is now the main thing holding refinements back. The Strands Harness Optimizer would be a fair external baseline for the context-tuning part of what Ripple does. The ablation has four held-out specs, so each board is a 25-point step; more held-out specs would make the table more convincing.
 
 \appendix
 
