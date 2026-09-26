@@ -10,6 +10,7 @@ import type { PCBComponent, PCBState } from "@/lib/types";
 import { PCBBoard } from "./PCBBoard";
 import { PCBComponentMesh } from "./PCBComponentMesh";
 import { PCBTraceLine } from "./PCBTraceLine";
+import { BOARD_BOTTOM } from "./pcbScene.shared";
 import { WorldEnvironment } from "./WorldEnvironment";
 import { WorldGrid } from "./WorldGrid";
 
@@ -151,7 +152,7 @@ export function PCBScene({
       ))}
 
       <ContactShadows
-        position={[0, -0.17, 0]}
+        position={[0, BOARD_BOTTOM - 0.008, 0]}
         opacity={0.55}
         scale={24}
         blur={2.6}
