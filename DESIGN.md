@@ -219,6 +219,13 @@ LANGSMITH_PROJECT=board-forge
 
 Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 
+| Owner | Area |
+|---|---|
+| Marcos | Hardware logic: specs, hidden checker, critic, planner, finale board; presents the demo |
+| Jovian | Harness core: Atlas, config versioning and gate, memory and retrieval, work queue |
+| Arjun | Agents and tools: tscircuit wrappers, model router, coder, MCP access, meta-agent, ablation |
+| Jack | Front end: UI, PCB preview, Vercel deploys, README, video and submission |
+
 ### Everyone
 - [ ] **10:30–11:15** Kickoff: repo, pinned versions, decisions table, freeze `HarnessConfig` and `RunResult`, index setup, green check
 - [ ] **12:30** Checkpoint: one board goes spec → routed PCB → passes hidden checks under a stored config version
@@ -227,6 +234,7 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 - [ ] **4:30–5:00** Record the 1-minute video on site and submit
 
 ### Marcos: hardware logic, critic, planner, demo
+- [ ] **Before 10:30** Install tscircuit on every laptop; build an LED-plus-resistor board through the autorouter
 - [ ] 10-minute PCB primer for the team at kickoff
 - [ ] **11:00–12:30** 8 training and 4 held-out specs; hidden checker (connectivity, pull-up and decoupling rules) returning `RunResult`
 - [ ] **12:30–1:30** Critic agent (code and prompt) and lesson extraction into Atlas
@@ -234,15 +242,16 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 - [ ] **2:30–3:30** Finale board spec, checks, first full run; parts whitelist
 - [ ] Present the live demo
 
-### Teammate 1: harness core and memory
-- [ ] **10:30–11:00** Repo, `db.ts`, index setup script, `.env.example`; LangGraph go/no-go by 11:00
+### Jovian: harness core and memory
+- [x] Repo layout, `.env.example`, shared types package (done before kickoff)
+- [ ] **10:30–11:00** `db.ts`, index setup script; LangGraph go/no-go by 11:00
 - [ ] **11:00–12:00** Config versioning: `harness_versions`, current config, propose
 - [ ] **12:00–1:00** Memory: Voyage embeddings, vector indexes, retrieval and rerank
 - [ ] **1:00–2:00** Work queue, transactions, idempotent runs, heartbeat, resume
 - [ ] **2:00–3:00** Config gate (keep, roll back, reject); change-stream triggers for critic and meta-agent
 - [ ] **3:00–3:30** Help run the finale board through the queue with kill-and-resume
 
-### Teammate 2: agents, tools, models
+### Arjun: agents, tools, models
 - [ ] **10:30–11:30** Tool wrappers: compile, autoroute, DRC, metrics → `RunResult`
 - [ ] **11:30–12:30** Model router (OpenRouter, cost logging, LangSmith) and coder agent
 - [ ] **12:30–1:00** Connect to the hidden checker for the checkpoint
@@ -250,10 +259,10 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 - [ ] **2:00–3:00** Meta-agent: batch results → proposed config change
 - [ ] **3:00–3:30** Ablation runner on held-out specs
 
-### Teammate 3: UI, demo, submission
+### Jack: front end, preview, submission
 - [ ] **10:30–11:00** Redeem v0 credits; scaffold Next.js on fixture data
 - [ ] **11:00–12:30** Spec input, PCB and schematic view, live run feed (fixtures)
-- [ ] **12:30–1:30** Local change-stream route; Vercel deployment with polling; switch to real data
+- [ ] **12:30–1:30** Local change-stream route; Vercel deployment with polling and preview deploys per PR; switch to real data
 - [ ] **1:30–2:30** Config diff viewer, ablation table, "why?" trace view
 - [ ] **2:30–3:30** README, project description, demo script
 - [ ] **4:30–5:00** Lead video recording and submission
@@ -261,11 +270,11 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 ### Handoffs
 | By | From → To | What |
 |---|---|---|
-| 11:00 | Teammate 2 → all | `RunResult` shape from tool wrappers |
-| 12:30 | Marcos → Teammate 2 | Hidden checker callable as a function |
-| 1:00 | Teammate 1 → Teammate 2, Marcos | Retrieval for coder and critic |
-| 2:00 | Teammate 1 → Teammate 2 | Config versioning and gate for the meta-agent |
-| 3:00 | Teammate 2 → Teammate 3 | Ablation results |
+| 11:00 | Arjun → all | `RunResult` shape from tool wrappers |
+| 12:30 | Marcos → Arjun | Hidden checker callable as a function |
+| 1:00 | Jovian → Arjun, Marcos | Retrieval for coder and critic |
+| 2:00 | Jovian → Arjun | Config versioning and gate for the meta-agent |
+| 3:00 | Arjun → Jack | Ablation results |
 
 ### Priorities if time runs short
 1. **Must have:** loop with hidden checks, subcircuit library, lessons retrieved from memory, versioned config
