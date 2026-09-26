@@ -17,10 +17,15 @@ interface Critic {
 // Dynamic import: scripts/tsconfig.json can't statically walk tscircuit (same as scripts/ablation.ts).
 const { runBoard } = (await import(new URL("../apps/worker/src/agents/coder-loop.ts", import.meta.url).href)) as {
   runBoard: (specId: string, config: HarnessConfig, opts: { useMemory?: boolean; writeMemory?: boolean }) =>
-    Promise<{ boardId: string; attempts: number; runResult: RunResult; criticResults: Critic[]; coderResult?: { metrics: Quality } }>;
+    Promise<{ boardId: string; attempts: number; runResult: RunResult; criticResults: Critic[]; coderResult?: { metrics: Quality }; improve?: Improve }>;
 };
 
 interface Quality { area_mm2: number; density: number; detour: number; vias: number; parts: number; bom_usd: number }
+interface Improve {
+  before: Quality;
+  after?: Quality;
+  rounds: { edits: string[]; expected: string; passed: boolean; ratio: number | null; adopted: boolean; after?: Quality; failures?: { check: string; detail: string }[] }[];
+}
 const describe = (q: Quality) =>
   `${q.area_mm2.toFixed(0)} mm² (parts cover ${(q.density * 100).toFixed(0)}%), routing ${q.detour.toFixed(2)}x straight-line, ${q.vias} vias, ${q.parts} parts, BOM $${q.bom_usd.toFixed(2)}`;
 
@@ -54,7 +59,19 @@ graded.forEach((run, i) => {
     for (const l of c.lessons.slice(0, 3)) console.log(`   lesson: ${l.pattern} → ${l.fix.slice(0, 90)}`);
   }
 });
-if (r.runResult.passed && r.coderResult) console.log(`\nboard: ${describe(r.coderResult.metrics)}`);
+if (r.improve) {
+  const imp = r.improve;
+  console.log(`\npassing board: ${describe(imp.before)}`);
+  imp.rounds.forEach((round, i) => {
+    if (!round.edits.length) return console.log(`improve round ${i + 1}: critic suggests no edits${round.expected ? ` (${round.expected})` : ""}`);
+    const gain = round.ratio === null ? "" : `, ${round.ratio >= 1 ? "+" : "−"}${(Math.abs(round.ratio - 1) * 100).toFixed(0)}% board quality`;
+    console.log(`improve round ${i + 1}: ${round.adopted ? "KEPT" : round.passed ? "not better, discarded" : "failed a check, discarded"}${gain}`);
+    for (const e of round.edits) console.log(`   critic: ${e.slice(0, 130)}`);
+    if (round.after) console.log(`   result: ${describe(round.after)}`);
+    for (const f of (round.failures ?? []).slice(0, 3)) console.log(`   ✗ ${f.check}: ${f.detail.slice(0, 110)}`);
+  });
+  if (imp.after) console.log(`kept board: ${describe(imp.after)}`);
+}
 const cost = runs.reduce((s, x) => s + (x.cost_usd ?? 0), 0);
 console.log(`\n${r.runResult.passed ? "PASSED" : "did not pass"} in ${r.attempts} attempt(s), $${cost.toFixed(4)}; board ${r.boardId}`);
 await client.close();

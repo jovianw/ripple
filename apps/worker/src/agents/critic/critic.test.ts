@@ -6,6 +6,10 @@ import { keepPlacement, normalizeCoderSource, validPinLabel } from "../../tools/
 import { describeLayout } from "./layout.js"
 import { settlePlacement } from "../../tools/placement.js"
 import { compactWhitelist, criticUserPrompt } from "./prompt.js"
+import { improveUserPrompt } from "./improve.js"
+import { fitBoardToParts, BOARD_MARGIN_MM } from "../../tools/board-outline.js"
+import { courtyards } from "../../tools/placement.js"
+import { computeMetrics } from "../../tools/metrics.js"
 
 const BOARD = `export default () => (
   <board>
@@ -145,8 +149,51 @@ test("a header labelled from the spec's wording (\"3.3V\") renders after normali
   assert.deepEqual(failed((await evaluateCircuitSource(fixed)).circuitJson), [])
 })
 
-test("the critic's parts list shows each part's exact element and props", () => {
+test("the critic's parts list shows each part's price, exact element and props", () => {
   const list = compactWhitelist()
-  assert.match(list, /- header_2: <pinheader pinCount=\{2\} footprint="pinrow2" \/>/)
-  assert.match(list, /- temp_sensor_lm75: <chip manufacturerPartNumber="LM75B" footprint="soic8" \/>.* pins: SDA, SCL/)
+  assert.match(list, /- header_2 \(\$0\.03\): <pinheader pinCount=\{2\} footprint="pinrow2" \/>/)
+  assert.match(list, /- temp_sensor_lm75 \(\$0\.35\): <chip manufacturerPartNumber="LM75B" footprint="soic8" \/>.* pins: SDA, SCL/)
+})
+
+// Improve rounds: the board the critic suggests edits for, and the outline the harness fits around its placement.
+const SPREAD = `export default () => (
+  <board width="40mm" height="30mm">
+    <pinheader name="J1" pinCount={2} pinLabels={["VCC", "GND"]} footprint="pinrow2" pcbX={-12} pcbY={8} />
+    <resistor name="R1" resistance="1k" footprint="0603" pcbX={0} pcbY={0} />
+    <led name="LED1" color="red" footprint="0603" pcbX={10} pcbY={-8} />
+    <trace from=".J1 > .pin1" to=".R1 > .pin1" />
+    <trace from=".R1 > .pin2" to=".LED1 > .anode" />
+    <trace from=".LED1 > .cathode" to=".J1 > .pin2" />
+  </board>
+)`
+
+test("fitBoardToParts wraps the parts' outlines with the margin, centred, and the result renders inside the board", async () => {
+  const { circuitJson } = await evaluateCircuitSource(SPREAD)
+  const fitted = fitBoardToParts(SPREAD, circuitJson)
+  const { circuitJson: after } = await evaluateCircuitSource(fitted)
+  const els = after as { type: string; [k: string]: any }[]
+  const board = els.find((e) => e.type === "pcb_board")!
+  const boxes = [...courtyards(els).values()]
+  const x0 = Math.min(...boxes.map((b) => b.x0)), x1 = Math.max(...boxes.map((b) => b.x1))
+  const y0 = Math.min(...boxes.map((b) => b.y0)), y1 = Math.max(...boxes.map((b) => b.y1))
+  assert.ok(board.width < 40 && board.height < 30, "tighter than the hand-set 40 x 30mm board")
+  assert.ok(Math.abs(board.width - (x1 - x0) - 2 * BOARD_MARGIN_MM) < 0.2)
+  assert.ok(Math.abs((x0 + x1) / 2) < 0.1 && Math.abs((y0 + y1) / 2) < 0.1, "parts centred on the board")
+  assert.deepEqual(els.filter((e) => e.type === "pcb_component_outside_board_error"), [])
+  assert.equal((fitted.match(/<board\b[^>]*>/)![0].match(/width=/g) ?? []).length, 1, "one width, not two")
+})
+
+test("the improve prompt shows the board, the parts' span and a discarded round", async () => {
+  const { circuitJson } = await evaluateCircuitSource(SPREAD)
+  const prompt = improveUserPrompt({
+    spec: { _id: "t01_led_indicator", text: "LED board" },
+    code: SPREAD,
+    circuitJson,
+    metrics: computeMetrics(circuitJson as never),
+    rules: [],
+    lastTry: { edits: ["Move R1 to pcbX={1}"], outcome: "it failed: drc: overlap" },
+  })
+  assert.match(prompt, /Board: 40\.0 x 30\.0 mm \(1200 mm²\)/)
+  assert.match(prompt, /Parts span \(courtyards\): x -?[\d.]+\.\.[\d.]+/)
+  assert.match(prompt, /last edits to this board were discarded\n- Move R1 to pcbX=\{1\}\nResult: it failed: drc: overlap/)
 })

@@ -128,7 +128,7 @@ export function compactWhitelist(): string {
       .filter(([k]) => k !== "pinLabels" && k !== "pinAttributes")
       .map(([k, v]) => (typeof v === "string" ? `${k}="${v}"` : `${k}={${JSON.stringify(v)}}`))
       .join(" ")
-    return `- ${p.id}: <${p.element}${props ? ` ${props}` : ""} /> ${p.description}${pins}`
+    return `- ${p.id} ($${p.unit_price_usd}): <${p.element}${props ? ` ${props}` : ""} /> ${p.description}${pins}`
   })
   return `Whitelist ${PARTS_WHITELIST_VERSION}:\n${lines.join("\n")}`
 }

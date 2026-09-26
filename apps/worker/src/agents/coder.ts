@@ -20,6 +20,8 @@ export interface CoderInput {
   previousFailure?: string;
   /** The previous attempt's code. With it, the coder edits that code instead of writing a new board. */
   previousSource?: string;
+  /** Improvements to a passing board (the critic's improve mode), applied to previousSource instead of a failure fix. */
+  improvements?: string[];
 }
 
 export interface CoderModelInfo {
@@ -110,7 +112,12 @@ function buildUserPrompt(input: CoderInput): string {
     );
   }
 
-  if (input.previousFailure) {
+  if (input.improvements?.length) {
+    parts.push(
+      `This version passes every check. Make it a better board with these edits:\n${input.improvements.map((e) => `- ${e}`).join("\n")}\n` +
+        `Change nothing else: every part, value, name and trace stays.`,
+    );
+  } else if (input.previousFailure) {
     parts.push(`Previous attempt failed with:\n${input.previousFailure}\nFix this in the new version.`);
   }
 
@@ -119,7 +126,10 @@ function buildUserPrompt(input: CoderInput): string {
 
 function extractSource(content: string): string {
   const fenced = content.match(/```(?:tsx|jsx|ts|js)?\n([\s\S]*?)```/);
-  return (fenced ? fenced[1] : content).trim();
+  if (fenced) return fenced[1].trim();
+  // Unfenced code after a sentence of prose ("Here is the edited board:") doesn't parse: start at the module.
+  const start = content.search(/^\s*(?:import\b|export\s+default\b)/m);
+  return (start > 0 ? content.slice(start) : content).trim();
 }
 
 /** The model's code didn't compile or render. Carries the code and the call's cost so the loop can record the attempt and hand the code to the critic. */

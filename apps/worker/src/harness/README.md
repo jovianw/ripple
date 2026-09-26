@@ -108,11 +108,17 @@ const decision = await evaluatePending((config) => runBatch(TRAINING_SPEC_IDS, c
   `detour` (trace length ÷ per-net minimum spanning tree over pad positions; 1.0 = straight lines), `vias`, `parts`,
   `bom_usd` (whitelist `unit_price_usd`). A board with an off-whitelist part, no sized `<board>` or no connections fails
   the attempt instead of scoring.
-- **`harness/quality.ts`**: `boardRatio(a, b)` = geometric mean of a/b over area, detour, vias + 1, parts and BOM (above 1 =
-  b is better); `qualityVsParent(candidate, parent)` = median `boardRatio` over the specs both batches passed
+- **`harness/quality.ts`**: `boardRatio(a, b)` = weighted geometric mean of a/b over area (weight 2), detour, vias +
+  connections, parts and BOM (weight 1 each; `QUALITY_WEIGHTS`; above 1 = b is better); `qualityVsParent(candidate, parent)` = median `boardRatio` over the specs both batches passed
   (`{ ratio, shared }`, `ratio: null` when none). Only boards of the same spec are compared: absolute numbers depend on
   the spec, and density rewards bigger footprints, so it's reported but never compared.
-- The passing attempt's run gets `final: true`: that's the board whose quality is scored.
+- **Improve rounds** (`agents/coder-loop.ts`, `IMPROVE_ROUNDS` = 3): after a pass, the critic's improve mode
+  (`agents/critic/improve.ts`) suggests edits for a smaller board, more direct routing and a cheaper BOM; the coder
+  applies them to the pinned code; the harness sizes the board to wrap the new placement (`tools/board-outline.ts`,
+  1.5mm margin); the hidden checks grade it. Kept only if it passes and `boardRatio(kept, edited) > 1`; a discarded
+  round is shown to the critic in the next one. Stages `improve_critique` / `improve`, not counted as attempts.
+- The kept board's run (the passing attempt, or the last kept improve round) gets `final: true`: that's the board whose
+  quality is scored.
 
 Meta-agent loop: `propose(change, rationale)` → `evaluatePending(...)` → read `decision.verdict` / `reasons`. Rejected and
 rolled-back versions stay in `harness_versions` for the config diff view.

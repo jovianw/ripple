@@ -45,13 +45,16 @@ is fine.
 db().collection("runs").find({}, { sort: { ts: -1 }, limit: 50, projection: { embedding: 0 } })
 ```
 Run fields (`RunResult`): `_id`, `board_id`, `harness_version`, `stage` (`"checks"` = one graded attempt; also `"compile"`,
-`"critique"`, `"cache_hit"`, `"error"`, `"subcircuit"`, `"final"`), `passed`, `failures: [{ check, detail }]`, `drc_errors`,
+`"critique"`, `"improve_critique"`, `"improve"`, `"cache_hit"`, `"error"`, `"subcircuit"`, `"final"`), `passed`, `failures: [{ check, detail }]`, `drc_errors`,
 `metrics: { area_mm2, vias, trace_mm, bom_usd }` (`bom_usd` from whitelist unit prices), `model` (`"cheap" | "strong"`),
 `tokens`, `cost_usd`, `ts` (ISO string). Attempt number is the suffix of `_id` (`<board_id>_<n>`) for single boards.
 Single-board runs also carry `spec_id`, `check_score` (partial credit, 0..1: share of the spec's hidden-check categories
 passed), `quality` (`{ area_mm2, density, trace_mm, connections, detour, vias, parts, bom_usd }`; `detour` 1.0 = straight
-lines, `density` = share of the board covered by parts) and `final: true` on the passing attempt (the board that's
-scored).
+lines, `density` = share of the board covered by parts) and `final: true` on the run whose board was kept (the board
+that's scored). After a pass, up to 3 improve rounds: `<board_id>_improve<n>_critique` (`stage: "improve_critique"`,
+`improve: { edits, expected }`: what the critic suggested to make the board smaller, more direct or cheaper) and
+`<board_id>_improve<n>` (`stage: "improve"`: the edited board, graded). A round whose board still passes and is better
+is kept: it gets a `boards` doc and, if it's the last kept round, `final: true`.
 
 **Live updates:** on Vercel, poll `runs` by `ts > lastSeen` every 2 s. Locally (demo laptop) a route handler can hold a
 change stream open and forward inserts as server-sent events:
