@@ -153,7 +153,7 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
     // Critic diagnoses the failure and proposes the smallest fix; that fix
     // (not just the raw failure list) becomes the next attempt's context.
     // Lessons it writes are stored immediately (memory.addLesson), so they
-    // can help other boards even if this one keeps failing.
+    // can help other boards even if this one keeps failing — unless writeMemory is off.
     if (attempts < maxAttempts) {
       const critic = await runCritic(
         {
@@ -166,7 +166,7 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
           attempt: attempts,
           repairBudget: maxAttempts,
         },
-        { complete: completeCritic, addLesson },
+        { complete: completeCritic, ...(writeMemory && { addLesson }) },
       );
       criticResults.push(critic);
       previousFailure = [...critic.diagnosis.map((d) => `${d.check}: ${d.cause}`), ...critic.fix].join("\n");
