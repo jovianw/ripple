@@ -13,6 +13,7 @@ import {
   type RunDoc,
   type SubcircuitDoc,
 } from "@/lib/live";
+import { SpecRunner } from "@/components/live/SpecRunner";
 
 interface BoardSummary {
   board_id: string;
@@ -158,6 +159,8 @@ export function LiveConsole() {
           ) : null}
         </div>
       ) : null}
+
+      <SpecRunner />
 
       <Section
         title="Harness evolution"
@@ -349,7 +352,7 @@ export function LiveConsole() {
       </Section>
 
       <footer className="mt-auto py-4 text-[11px] text-ghost">
-        Read-only view of Atlas · polling every {POLL_MS / 1000}s
+        Read-only view of Atlas (spec requests excepted) · polling every {POLL_MS / 1000}s
       </footer>
     </div>
   );

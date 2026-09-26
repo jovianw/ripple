@@ -13,6 +13,7 @@ export type StoredWorkItem = WorkItem & {
   attempts: number;
   max_attempts: number;
   claimed_by?: string;
+  claimed_pid?: number; // process on `claimed_by`'s machine; a dead pid means the claim is abandoned
   started_at?: string;
   finished_at?: string;
   error?: string;
@@ -40,6 +41,7 @@ export type SpecRequest = {
   status: "queued" | "running" | "done" | "failed";
   created_at: Date | string;
   claimed_by?: string;
+  claimed_pid?: number; // process on `claimed_by`'s machine; a dead pid means the claim is abandoned
   started_at?: string;
   heartbeat?: string;
   finished_at?: string;

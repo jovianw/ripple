@@ -28,7 +28,8 @@
     "evolve": "tsx --env-file-if-exists=.env scripts/evolve.ts",
     "worker": "tsx --env-file-if-exists=.env scripts/worker.ts",
     "lessons": "tsx --env-file-if-exists=.env scripts/lessons.ts",
-    "board": "tsx --env-file-if-exists=.env scripts/board.ts"
+    "board": "tsx --env-file-if-exists=.env scripts/board.ts",
+    "seed:specs": "tsx --env-file-if-exists=.env scripts/seed-specs.ts"
   },
   "devDependencies": {
     "@resvg/resvg-js": "2.6.2",
