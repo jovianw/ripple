@@ -1,0 +1,8 @@
+# LF everywhere, including Windows checkouts: several parsers (finale reference, assembler, coder output) match "\n"
+# and break on CRLF files.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.pdf binary
+*.ico binary
+*.glb binary
