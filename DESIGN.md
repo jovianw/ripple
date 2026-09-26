@@ -259,8 +259,8 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 - [x] **11:30–12:30** Model router (OpenRouter, cost logging via `usage.include`, LangSmith tracing) and coder agent (`apps/worker/src/tools/router.ts`: `callModel`, `createComplete` for the critic/planner's JSON-schema `complete`; `apps/worker/src/agents/coder.ts`)
 - [x] **12:30–1:00** Connect to the hidden checker for the checkpoint (`apps/worker/src/agents/coder-loop.ts`: `runBoard`/`runBatch` call `checks/index.ts`'s `runChecks`, store `RunResult`, retry through the critic up to `repair_budget`)
 - [ ] **1:00–2:00** Read-only MCP access for the critic and meta-agent
-- [ ] **2:00–3:00** Meta-agent: batch results → proposed config change
-- [ ] **3:00–3:30** Ablation runner on held-out specs
+- [x] **2:00–3:00** Meta-agent: batch results → proposed config change (`apps/worker/src/agents/meta.ts`: `proposeFromBatch(results, config)`, structured JSON output via `createComplete`, calls Jovian's `propose()`; never applies anything itself)
+- [x] **3:00–3:30** Ablation runner on held-out specs (`scripts/ablation.ts`, `npm run ablation`: bare model vs. harness v0 vs. evolved config, `writeMemory: false`)
 
 ### Jack: front end, preview, submission
 - [ ] **10:30–11:00** Redeem v0 credits; scaffold Next.js on fixture data
