@@ -23,3 +23,24 @@ export function normalizeCoderSource(source: string): string {
 export function withoutPlacement(source: string): string {
   return source.replace(/\s+(?:pcbX|pcbY|pcbRotation)=(?:"[^"]*"|'[^']*'|\{[^}]*\})/g, "")
 }
+
+type El = { type: string; [k: string]: any }
+const round2 = (n: number) => Math.round(n * 100) / 100
+
+/**
+ * Writes the positions tscircuit chose (from a render of `source`) back into the code as pcbX/pcbY/pcbRotation, so
+ * the block lands in the same place every time it's rendered: alone for measuring, and inside the assembled board.
+ * Automatic placement alone can differ between those two contexts, which let parts of different blocks overlap.
+ */
+export function bakePlacement(source: string, circuitJson: El[]): string {
+  const names = new Map(circuitJson.filter((e) => e.type === "source_component").map((c) => [c.source_component_id, c.name as string]))
+  let out = source
+  for (const pc of circuitJson.filter((e) => e.type === "pcb_component" && e.center)) {
+    const name = names.get(pc.source_component_id)
+    if (!name) continue
+    const rot = round2(pc.rotation ?? 0)
+    const attrs = ` pcbX={${round2(pc.center.x)}} pcbY={${round2(pc.center.y)}}${rot ? ` pcbRotation={${rot}}` : ""}`
+    out = out.replace(new RegExp(`(<[A-Za-z]+\\b[^>]*?\\bname=["']${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["'])`), `$1${attrs}`)
+  }
+  return out
+}

@@ -13,7 +13,7 @@ import type { CoderInput } from "../agents/coder.js"
 import { assemble } from "../assembler/assembler.js"
 import { getPart, partExample } from "../tools/parts-whitelist.js"
 import { evaluateCircuitSource } from "../tools/evaluate.js"
-import { normalizeCoderSource, withoutPlacement } from "../tools/normalize.js"
+import { bakePlacement, normalizeCoderSource, withoutPlacement } from "../tools/normalize.js"
 import { attributeFailures } from "./attribute.js"
 
 const OVERLAP = /overlap|placement_error|outside_board/
@@ -153,7 +153,15 @@ export function plannedBoardHandler(spec: PlannedBoardSpec, config: HarnessConfi
       // Repair loop: blame each failure on the subcircuit that caused it, rebuild just those, reassemble.
       // Enqueued before this step commits; keys are deterministic, so a crash and rerun enqueues nothing twice.
       const maxRounds = deps.maxRepairRounds ?? 2
-      if (!result.passed && round < maxRounds) {
+      // Stop when a repair round didn't reduce the failures: more rounds rarely recover, and the best board is kept.
+      let improving = true
+      if (round > 0) {
+        const prev = await col.boards.findOne({ board_id: item.board_id, kind: "final", round: round - 1 }, { sort: { created_at: -1 } })
+        const before = (prev?.failures as unknown[] | undefined)?.length ?? Infinity
+        improving = result.failures.length < before
+        if (!improving) deps.log?.(`repair round ${round} didn't improve (${before} -> ${result.failures.length} failures); stopping, best round kept`)
+      }
+      if (!result.passed && round < maxRounds && improving) {
         const blame = attributeFailures(result.failures, r.circuitJson as never, keys)
         if (blame.bySubcircuit.size) {
           const next = round + 1
@@ -218,8 +226,11 @@ export function plannedBoardHandler(spec: PlannedBoardSpec, config: HarnessConfi
       const auto = withoutPlacement(out.source)
       const json = await render(auto)
       if (errorCount(json) < errorCount(out.circuitJson)) {
-        out = { ...out, source: auto, circuitJson: json }
-        deps.log?.(`${item.key}: coder's parts overlapped; using tscircuit's placement instead`)
+        // Lock tscircuit's positions into the code so the block assembles exactly as it measured.
+        const baked = bakePlacement(auto, json)
+        const bakedJson = await render(baked)
+        out = errorCount(bakedJson) <= errorCount(json) ? { ...out, source: baked, circuitJson: bakedJson } : { ...out, source: auto, circuitJson: json }
+        deps.log?.(`${item.key}: coder's parts overlapped; using tscircuit's placement instead${out.source === baked ? " (positions locked)" : ""}`)
       }
     }
     // Shared nets (V3V3, SDA...) only get their other ends at assembly, so a subcircuit routed on its own can't
@@ -257,10 +268,16 @@ export function plannedBoardHandler(spec: PlannedBoardSpec, config: HarnessConfi
   }
 }
 
+/** The best assembled board so far: passed first, then fewest hidden-check failures, then the latest. */
+export async function bestFinal(boardId: string) {
+  const finals = await col.boards.find({ board_id: boardId, kind: "final" }).toArray()
+  const score = (d: Document) => (d.passed ? -1 : ((d.failures as unknown[] | undefined)?.length ?? Infinity))
+  return finals.sort((a, b) => score(a) - score(b) || +new Date(b.created_at) - +new Date(a.created_at))[0] ?? null
+}
+
 /** Plans (first run only) and runs the board's queue to the end. Safe to call again after a crash. */
 export async function runPlannedBoard(boardId: string, spec: PlannedBoardSpec, config: HarnessConfig, deps: PlannedBoardDeps) {
   await startPlannedBoard(boardId, spec, config, deps)
   await runQueue(boardId, plannedBoardHandler(spec, config, deps), { log: deps.log })
-  const final = await col.boards.findOne({ board_id: boardId, kind: "final" }, { sort: { created_at: -1 } })
-  return { progress: await progress(boardId), final }
+  return { progress: await progress(boardId), final: await bestFinal(boardId) }
 }
