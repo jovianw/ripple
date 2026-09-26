@@ -1,16 +1,28 @@
 {
   "name": "ripple",
   "private": true,
-  "engines": { "node": ">=22.13" },
-  "workspaces": ["apps/*", "packages/*"],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "typecheck": "tsc -b packages/types apps/worker && tsc -p scripts",
+    "typecheck": "tsc -b packages/types apps/worker && tsc -p scripts && tsc -p .",
     "setup:indexes": "tsx --env-file-if-exists=.env scripts/setup-indexes.ts",
-    "green": "tsx --env-file-if-exists=.env scripts/green-check.ts"
+    "green": "tsx --env-file-if-exists=.env scripts/green-check.ts",
+    "smoke": "tsx scripts/smoke-board.tsx",
+    "verify:parts": "tsx scripts/verify-parts.tsx",
+    "test:checks": "TSX_TSCONFIG_PATH=checks/tsconfig.json tsx --test checks/**/*.test.tsx"
   },
   "devDependencies": {
+    "@tscircuit/checks": "0.0.208",
     "@types/node": "24.19.0",
+    "circuit-to-svg": "0.0.430",
+    "tscircuit": "0.0.2646",
     "tsx": "4.23.15",
     "typescript": "^5.6.0"
-  }
+  },
+  "type": "module"
 }

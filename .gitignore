@@ -1,4 +1,4 @@
-node_modules/
+node_modules
 dist/
 .next/
 *.tsbuildinfo
@@ -12,3 +12,4 @@ dist/
 .vscode/mcp.json
 
 .DS_Store
+out/
