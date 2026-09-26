@@ -10,7 +10,6 @@ import { StageRibbon } from "@/components/build/StageRibbon";
 import { Telemetry } from "@/components/build/Telemetry";
 import { ComponentInspector } from "@/components/pcb/ComponentInspector";
 import { PCBViewport } from "@/components/pcb/PCBViewport";
-import type { RippleEvent } from "@/components/pcb/RippleField";
 import { WorldHud } from "@/components/pcb/WorldHud";
 import { DEFAULT_PROMPT, DEMO_SNAPSHOTS } from "@/lib/demoSnapshots";
 import { deriveMetrics } from "@/lib/metrics";
@@ -143,37 +142,6 @@ export function RippleDashboard() {
     [diff],
   );
 
-  // Change propagation: one ring per meaningful edit, keyed by snapshot so the
-  // scene admits each exactly once.
-  const ripples = useMemo<RippleEvent[]>(() => {
-    if (!current) return [];
-    const version = current.version;
-    const out: RippleEvent[] = [];
-
-    // Routine placement does not ripple — a ring on every part that lands is
-    // noise, and it spends the motif on the least interesting moment. Only the
-    // repair part earns one.
-    for (const c of diff.addedComponents) {
-      if (c.placedDuring !== "repair") continue;
-      out.push({
-        id: `${version}:add:${c.id}`,
-        x: c.position.x,
-        y: c.position.y,
-        tone: "repair",
-      });
-    }
-    for (const c of diff.changedComponents) {
-      if (c.status !== "error" && c.status !== "repairing") continue;
-      out.push({
-        id: `${version}:${c.status}:${c.id}`,
-        x: c.position.x,
-        y: c.position.y,
-        tone: c.status === "error" ? "error" : "repair",
-      });
-    }
-    return out;
-  }, [current, diff]);
-
   const history = useMemo(
     () => SNAPSHOTS.slice(0, isLive ? revealed : currentIndex + 1),
     [isLive, revealed, currentIndex],
@@ -247,7 +215,6 @@ export function RippleDashboard() {
               changedIds={changedIds}
               snapshotVersion={current?.version ?? -1}
               focusId={faultId}
-              ripples={ripples}
               complete={complete}
               onSelect={setSelected}
             />

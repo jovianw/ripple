@@ -34,7 +34,7 @@ lib/demoSnapshots.ts     <- the ONLY file that knows the demo is scripted
 components/RippleDashboard.tsx    (owns state + the build runner)
         |
         +-- components/pcb/        the world: scene, board, parts, traces,
-        |                          skybox, grid, ripple propagation, HUD
+        |                          skybox, grid, HUD
         +-- components/activity/   ExecutionTrace
         +-- components/build/      StageRibbon, HistoryGraph, Telemetry,
                                    SpecificationBar
@@ -62,8 +62,9 @@ available, write a `CircuitJSON -> PCBState` adapter and leave the scene alone.
   measurements, step numbers.
 - Colour encodes state and nothing else: accent = active, green = passed,
   red = failed, amber = repairing. Normal events are neutral.
-- **Change propagation** is the signature: any meaningful edit emits one
-  expanding ring from the part that changed (`RippleField`).
+- Motion is reserved for state changes: a part drops in when it is placed, a
+  trace draws itself along its own length, a failing part pulses. Nothing
+  animates decoratively.
 
 ## Notes for whoever touches the 3D scene
 

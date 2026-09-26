@@ -122,7 +122,6 @@ export function RealBoardView({ boardId }: { boardId: string }) {
             changedIds={NO_CHANGES}
             snapshotVersion={-1}
             focusId={null}
-            ripples={[]}
             complete={meta?.passed === true}
             onSelect={setSelected}
           />

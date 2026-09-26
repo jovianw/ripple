@@ -10,7 +10,6 @@ import type { PCBComponent, PCBState } from "@/lib/types";
 import { PCBBoard } from "./PCBBoard";
 import { PCBComponentMesh } from "./PCBComponentMesh";
 import { PCBTraceLine } from "./PCBTraceLine";
-import { RippleField, type RippleEvent } from "./RippleField";
 import { WorldEnvironment } from "./WorldEnvironment";
 import { WorldGrid } from "./WorldGrid";
 
@@ -86,8 +85,6 @@ export interface PCBSceneProps {
   changedIds: ReadonlySet<string>;
   snapshotVersion: number;
   focusId: string | null;
-  /** Change-propagation rings emitted for this snapshot. */
-  ripples: RippleEvent[];
   complete: boolean;
   onSelect: (component: PCBComponent | null) => void;
 }
@@ -99,7 +96,6 @@ export function PCBScene({
   changedIds,
   snapshotVersion,
   focusId,
-  ripples,
   complete,
   onSelect,
 }: PCBSceneProps) {
@@ -153,8 +149,6 @@ export function PCBScene({
           onSelect={onSelect}
         />
       ))}
-
-      <RippleField events={ripples} />
 
       <ContactShadows
         position={[0, -0.17, 0]}
