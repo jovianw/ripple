@@ -5,6 +5,7 @@ import type { HarnessConfig, Lesson, ModelTier, Subcircuit } from "@ripple/types
 import type { CircuitJson } from "tscircuit";
 import { callModel, type ChatMessage } from "../tools/router.js";
 import { evaluateCircuitSource } from "../tools/evaluate.js";
+import { normalizeCoderSource } from "../tools/normalize.js";
 import { EvaluateError } from "../tools/evaluate.js";
 import { runDrc, type DrcResult } from "../tools/drc.js";
 import { computeMetrics, type CircuitMetrics } from "../tools/metrics.js";
@@ -124,7 +125,10 @@ export async function runCoder(input: CoderInput): Promise<CoderResult> {
   ];
 
   const routerResult = await callModel({ role: "coder", messages, config: input.config });
-  const source = extractSource(routerResult.content);
+  // tscircuit gives every power-to-ground capacitor a 1mm max trace automatically; when the coder wires a cap
+  // straight to a chip's power pin, autorouting is skipped and the whole board shows as unconnected.
+  // normalizeCoderSource lifts that limit (the hidden checks still enforce 3mm placement) and fixes selector slips.
+  const source = normalizeCoderSource(extractSource(routerResult.content));
 
   const model: CoderModelInfo = {
     model: routerResult.model,
