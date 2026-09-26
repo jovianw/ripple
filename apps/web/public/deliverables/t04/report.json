@@ -1,0 +1,20 @@
+{
+  "name": "t04",
+  "spec_id": "t04_i2c_temp_breakout",
+  "spec": "A breakout for an I2C temperature sensor. Power it at 3.3V from a 4-pin header (3V3, GND, SDA, SCL).",
+  "passed": true,
+  "failures": [],
+  "metrics": {
+    "width_mm": 30,
+    "height_mm": 20,
+    "area_mm2": 600,
+    "layers": 2,
+    "components": 5,
+    "unique_parts": 4,
+    "nets": 4,
+    "traces": 13,
+    "vias": 5,
+    "trace_mm": 90
+  },
+  "skipped": []
+}

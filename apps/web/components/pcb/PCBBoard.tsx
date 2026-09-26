@@ -35,10 +35,11 @@ export function PCBBoard({ width, height }: { width: number; height: number }) {
       >
         <meshStandardMaterial
           color={COLORS.substrate}
-          roughness={0.72}
-          metalness={0.08}
+          roughness={0.66}
+          metalness={0.1}
         />
       </RoundedBox>
+
 
       <Line
         points={border}

@@ -32,6 +32,8 @@ export interface PCBComponent {
   placedDuring?: BuildStage;
   /** Shown in the inspector when status is "error". */
   note?: string;
+  /** Unit cost, summed into the BOM metric. */
+  costUsd?: number;
 }
 
 export type PCBTraceStatus = "normal" | "new" | "error" | "repairing";
@@ -47,7 +49,21 @@ export interface PCBTrace {
 export interface PCBState {
   components: PCBComponent[];
   traces: PCBTrace[];
-  board: { width: number; height: number };
+  /** Scene units for layout, plus the physical size quoted in the metrics strip. */
+  board: { width: number; height: number; widthMm: number; heightMm: number };
+}
+
+/**
+ * The engineering readout. Everything except drcErrors is derived from
+ * PCBState so the strip can never disagree with the board (see lib/metrics.ts).
+ */
+export interface DesignMetrics {
+  components: number;
+  nets: number;
+  drcErrors: number;
+  boardWidthMm: number;
+  boardHeightMm: number;
+  bomUsd: number;
 }
 
 export type BuildStage =
@@ -75,21 +91,25 @@ export interface BuildSnapshot {
   delay?: number;
   /** Short label for the build-history timeline. */
   tick: string;
+  /** Design-rule errors open at this snapshot; drives the DRC readout. */
+  drcErrors?: number;
+  /** One or two lines shown when hovering this node in the build history. */
+  summary?: string[];
 }
 
 /** Stage order, for the progress rail. */
 export const STAGES: { id: BuildStage; label: string }[] = [
   { id: "planning", label: "Plan" },
-  { id: "placement", label: "Placement" },
-  { id: "wiring", label: "Wiring" },
-  { id: "routing", label: "Routing" },
-  { id: "checking", label: "Checks" },
+  { id: "placement", label: "Place" },
+  { id: "wiring", label: "Wire" },
+  { id: "routing", label: "Route" },
+  { id: "checking", label: "Check" },
   { id: "repair", label: "Repair" },
-  { id: "complete", label: "Done" },
+  { id: "complete", label: "Pass" },
 ];
 
 export const EMPTY_PCB: PCBState = {
   components: [],
   traces: [],
-  board: { width: 12, height: 8 },
+  board: { width: 12, height: 8, widthMm: 48, heightMm: 32 },
 };

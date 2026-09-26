@@ -29,17 +29,24 @@ export const COLORS = {
   placing: "#4ea8ff",
 } as const;
 
-/** Body colour and finish per package type. */
+/**
+ * Body colour and finish per package type. Types are separated by silhouette
+ * and material, never by hue — moulded black for silicon, bare metal for the
+ * connector, matte earth tones for passives.
+ */
 export const MATERIAL_BY_TYPE: Record<
   PCBComponentType,
   { color: string; metalness: number; roughness: number }
 > = {
-  ic: { color: "#141414", metalness: 0.25, roughness: 0.55 },
-  module: { color: "#1b1b1d", metalness: 0.2, roughness: 0.6 },
-  sensor: { color: "#23232a", metalness: 0.25, roughness: 0.5 },
-  connector: { color: "#b8bcc4", metalness: 0.9, roughness: 0.28 },
-  resistor: { color: "#2b2118", metalness: 0.1, roughness: 0.7 },
-  capacitor: { color: "#3a2b1a", metalness: 0.15, roughness: 0.65 },
+  // Moulded epoxy: dark, tight highlight along the top edge.
+  ic: { color: "#101012", metalness: 0.35, roughness: 0.32 },
+  module: { color: "#17171a", metalness: 0.3, roughness: 0.38 },
+  sensor: { color: "#1e1e24", metalness: 0.35, roughness: 0.3 },
+  // Stamped shield can: clearly metal next to the epoxy parts.
+  connector: { color: "#c6cad2", metalness: 0.96, roughness: 0.17 },
+  // Passives stay matte so they read as small and secondary.
+  resistor: { color: "#2b2118", metalness: 0.05, roughness: 0.82 },
+  capacitor: { color: "#3d2c19", metalness: 0.08, roughness: 0.78 },
 };
 
 /** Emissive tint used while a part is in a given state. */
