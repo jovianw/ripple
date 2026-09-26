@@ -4,7 +4,7 @@
 // New requests arrive through an Atlas change stream; a slow poll backs it up in case the stream drops.
 import { setTimeout as sleep } from "node:timers/promises";
 import { col, type SpecRequest } from "../db.js";
-import { defaultWorkerId } from "./queue.js";
+import { abandoned, defaultWorkerId } from "./queue.js";
 
 const HEARTBEAT_MS = 5_000;
 const STALE_MS = 60_000;
@@ -18,10 +18,12 @@ export type RequestHandler = (
 
 /** Requests this worker was running when it died, and anyone's whose heartbeat went stale, go back to queued. */
 export async function recoverRequests(workerId = defaultWorkerId()) {
-  const stale = new Date(Date.now() - STALE_MS).toISOString();
+  const running = await col.requests.find({ status: "running" }, { projection: { claimed_by: 1, claimed_pid: 1, heartbeat: 1 } }).toArray();
+  const ids = running.filter((r) => abandoned(r, workerId, STALE_MS)).map((r) => r._id!);
+  if (!ids.length) return 0;
   const res = await col.requests.updateMany(
-    { status: "running", $or: [{ claimed_by: workerId }, { heartbeat: { $lt: stale } }] },
-    { $set: { status: "queued" }, $unset: { claimed_by: "" } },
+    { _id: { $in: ids }, status: "running" },
+    { $set: { status: "queued" }, $unset: { claimed_by: "", claimed_pid: "" } },
   );
   return res.modifiedCount;
 }
@@ -31,24 +33,24 @@ export function claimRequest(workerId = defaultWorkerId()) {
   const t = now();
   return col.requests.findOneAndUpdate(
     { status: "queued" },
-    { $set: { status: "running", claimed_by: workerId, started_at: t, heartbeat: t } },
+    { $set: { status: "running", claimed_by: workerId, claimed_pid: process.pid, started_at: t, heartbeat: t } },
     { sort: { created_at: 1 }, returnDocument: "after" },
   );
 }
 
 async function runOne(req: SpecRequest & { _id: NonNullable<SpecRequest["_id"]> }, handler: RequestHandler, workerId: string) {
-  const mine = { _id: req._id, status: "running" as const, claimed_by: workerId };
+  const mine = { _id: req._id, status: "running" as const, claimed_by: workerId, claimed_pid: process.pid };
   const beat = setInterval(() => void col.requests.updateOne(mine, { $set: { heartbeat: now() } }).catch(() => {}), HEARTBEAT_MS);
   try {
     const setBoard = async (board_id: string, harness_version: number) => {
       await col.requests.updateOne(mine, { $set: { board_id, harness_version } });
     };
     const { passed, attempts } = await handler(req, setBoard);
-    await col.requests.updateOne(mine, { $set: { status: "done", passed, attempts, finished_at: now() }, $unset: { claimed_by: "" } });
+    await col.requests.updateOne(mine, { $set: { status: "done", passed, attempts, finished_at: now() }, $unset: { claimed_by: "", claimed_pid: "" } });
     return passed;
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
-    await col.requests.updateOne(mine, { $set: { status: "failed", error: error.slice(0, 500), finished_at: now() }, $unset: { claimed_by: "" } });
+    await col.requests.updateOne(mine, { $set: { status: "failed", error: error.slice(0, 500), finished_at: now() }, $unset: { claimed_by: "", claimed_pid: "" } });
     throw err;
   } finally {
     clearInterval(beat);

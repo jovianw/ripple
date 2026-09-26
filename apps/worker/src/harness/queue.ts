@@ -17,6 +17,27 @@ const STALE_MS = 30_000;
 /** Stable per machine, so a restarted worker recognizes the items it was running when it died. */
 export const defaultWorkerId = () => process.env.WORKER_ID || `worker-${hostname()}`;
 
+/** True if `pid` is a running process on this machine (signal 0 only checks). */
+export function processAlive(pid: number | undefined): boolean {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/**
+ * Whether a running claim is abandoned: claimed on this machine by a process that no longer exists (a restart resumes
+ * at once), or claimed elsewhere with a heartbeat older than `staleMs`. A live process on this machine is never
+ * robbed, even if two workers share a worker id.
+ */
+export function abandoned(item: { claimed_by?: string; claimed_pid?: number; heartbeat?: string }, workerId: string, staleMs: number) {
+  if (item.claimed_by === workerId) return item.claimed_pid !== process.pid && !processAlive(item.claimed_pid);
+  return !item.heartbeat || Date.parse(item.heartbeat) < Date.now() - staleMs;
+}
+
 export const runId = (boardId: string, step: number, attempt: number) =>
   createHash("sha1").update(`${boardId}:${step}:${attempt}`).digest("hex");
 
@@ -69,14 +90,14 @@ export async function enqueue(boardId: string, items: NewItem[]) {
  * plus anyone's whose heartbeat is older than STALE_MS (that worker died).
  */
 export async function recover(workerId = defaultWorkerId(), boardId?: string) {
-  const stale = new Date(Date.now() - STALE_MS).toISOString();
+  const running = await col.queue
+    .find({ status: "running", ...(boardId && { board_id: boardId }) }, { projection: { claimed_by: 1, claimed_pid: 1, heartbeat: 1 } })
+    .toArray();
+  const ids = running.filter((i) => abandoned(i, workerId, STALE_MS)).map((i) => i._id);
+  if (!ids.length) return 0;
   const res = await col.queue.updateMany(
-    {
-      status: "running",
-      ...(boardId && { board_id: boardId }),
-      $or: [{ claimed_by: workerId }, { heartbeat: { $lt: stale } }],
-    },
-    { $set: { status: "pending" }, $unset: { claimed_by: "" } },
+    { _id: { $in: ids }, status: "running" },
+    { $set: { status: "pending" }, $unset: { claimed_by: "", claimed_pid: "" } },
   );
   return res.modifiedCount;
 }
@@ -86,7 +107,7 @@ export async function claimNext(workerId = defaultWorkerId(), boardId?: string):
   const t = now();
   return col.queue.findOneAndUpdate(
     { status: "pending", waiting_on: { $size: 0 }, ...(boardId && { board_id: boardId }) },
-    { $set: { status: "running", claimed_by: workerId, heartbeat: t, started_at: t }, $inc: { attempts: 1 } },
+    { $set: { status: "running", claimed_by: workerId, claimed_pid: process.pid, heartbeat: t, started_at: t }, $inc: { attempts: 1 } },
     { sort: { step: 1 }, returnDocument: "after" },
   );
 }
@@ -94,7 +115,7 @@ export async function claimNext(workerId = defaultWorkerId(), boardId?: string):
 /** Refreshes the heartbeat. Returns false if the claim was lost (the item was recovered and taken by another worker). */
 export async function heartbeat(item: StoredWorkItem, workerId = defaultWorkerId()) {
   const res = await col.queue.updateOne(
-    { _id: item._id, status: "running", claimed_by: workerId },
+    { _id: item._id, status: "running", claimed_by: workerId, claimed_pid: process.pid },
     { $set: { heartbeat: now() } },
   );
   return res.matchedCount === 1;
@@ -115,8 +136,8 @@ export async function complete(
   try {
     await session.withTransaction(async () => {
       const done = await col.queue.updateOne(
-        { _id: item._id, status: "running", claimed_by: workerId },
-        { $set: { status: "done", finished_at: now() }, $unset: { claimed_by: "", error: "" } },
+        { _id: item._id, status: "running", claimed_by: workerId, claimed_pid: process.pid },
+        { $set: { status: "done", finished_at: now() }, $unset: { claimed_by: "", claimed_pid: "", error: "" } },
         { session },
       );
       if (done.matchedCount !== 1) throw new LostClaim(`lost claim on ${item._id}`);
@@ -141,8 +162,8 @@ export async function fail(item: StoredWorkItem, error: string, run?: RunResult,
     await session.withTransaction(async () => {
       const retry = item.attempts < item.max_attempts;
       const res = await col.queue.updateOne(
-        { _id: item._id, status: "running", claimed_by: workerId },
-        { $set: { status: retry ? "pending" : "failed", error, finished_at: now() }, $unset: { claimed_by: "" } },
+        { _id: item._id, status: "running", claimed_by: workerId, claimed_pid: process.pid },
+        { $set: { status: retry ? "pending" : "failed", error, finished_at: now() }, $unset: { claimed_by: "", claimed_pid: "" } },
         { session },
       );
       if (res.matchedCount !== 1) throw new LostClaim(`lost claim on ${item._id}`);
