@@ -45,9 +45,14 @@ is fine.
 db().collection("runs").find({}, { sort: { ts: -1 }, limit: 50, projection: { embedding: 0 } })
 ```
 Run fields (`RunResult`): `_id`, `board_id`, `harness_version`, `stage` (`"checks"` = one graded attempt; also `"compile"`,
-`"error"`, `"subcircuit"`, `"final"`), `passed`, `failures: [{ check, detail }]`, `drc_errors`,
-`metrics: { area_mm2, vias, trace_mm, bom_usd }` (`bom_usd` is 0 for now), `model` (`"cheap" | "strong"`), `tokens`,
-`cost_usd`, `ts` (ISO string). Attempt number is the suffix of `_id` (`<board_id>_<n>`) for single boards.
+`"optimize"`, `"critique"`, `"error"`, `"subcircuit"`, `"final"`), `passed`, `failures: [{ check, detail }]`, `drc_errors`,
+`metrics: { area_mm2, vias, trace_mm, bom_usd }` (`bom_usd` from whitelist unit prices), `model` (`"cheap" | "strong"`),
+`tokens`, `cost_usd`, `ts` (ISO string). Attempt number is the suffix of `_id` (`<board_id>_<n>`) for single boards.
+Single-board runs also carry `spec_id`, `check_score` (partial credit, 0..1: share of the spec's hidden-check categories
+passed), `quality` (`{ area_mm2, density, trace_mm, connections, detour, vias, parts, bom_usd }`; `detour` 1.0 = straight
+lines, `density` = share of the board covered by parts) and `final: true` on the run whose board was kept. After a pass,
+`<board_id>_optimize` (`stage: "optimize"`) is the optimize pass: one try at a smaller, cleaner board with the same parts
+and connections, kept (and `final`) only if it still passes and is better.
 
 **Live updates:** on Vercel, poll `runs` by `ts > lastSeen` every 2 s. Locally (demo laptop) a route handler can hold a
 change stream open and forward inserts as server-sent events:
@@ -61,7 +66,8 @@ Change streams need the long-lived local server; Vercel functions time out.
 ```ts
 db().collection("runs").find({ board_id }, { sort: { ts: 1 }, projection: { embedding: 0 } })
 ```
-Passed = any run with `passed: true`. Attempts = runs with `stage: "checks"`. Cost = sum of `cost_usd`.
+Passed = any run with `passed: true`. Attempts = runs with `stage: "checks"`. Cost = sum of `cost_usd`. The kept board
+= the run with `final: true` (it's the latest `boards` doc too).
 
 ### PCB view (Circuit JSON)
 Only the finale pipeline stores boards today:
@@ -101,22 +107,28 @@ db().collection("harness_versions").find({}, { sort: { version: 1 } })
 ```
 Each doc is a `HarnessConfig`: `version`, `parent`, `rules[]`, `context`, `tools`, `workflow`, `routing`, `verdict`
 (`kept | pending | rolled_back | rejected`), `rationale` (the meta-agent's reason), `scores?`
-(`{ checks_passed, attempts_per_board, cost_per_board_usd }`), plus from the gate: `gate_note` (why it was kept / rolled
-back / rejected, human-readable) and `decided_at`. Diff = a version against the version named in its `parent`.
+(`{ checks_passed, attempts_per_board, cost_per_board_usd, check_score?, board? }`: `check_score` = mean partial credit,
+`board` = mean `{ area_mm2, density, detour, vias, parts, bom_usd }` of passing boards or `null`; both absent on versions
+scored before graded scoring), plus from the gate: `gate_note` (why it was kept / rolled back / rejected,
+human-readable), `quality_vs_parent` (`{ ratio, shared }`: its boards vs the parent's, spec by spec, over `shared` specs
+both passed; `ratio` 1.12 = 12% better, `null` = no shared spec) and `decided_at`. Diff = a version against the version named in its `parent`.
 Current config = newest `kept`. Rejected and rolled-back versions stay, so show them: that's the "harness refusing bad
 changes" moment.
 
 ### Scores / ablation table
-Per config version, the same aggregation the gate uses (`apps/worker/src/harness/gate.ts` `scoreVersion`):
+Per config version, the same per-board aggregation the gate uses (`apps/worker/src/harness/gate.ts` `scoreVersion`),
+then averaged over boards (`check_score` over all boards, `finals` over passing ones):
 ```ts
 db().collection("runs").aggregate([
   { $match: { harness_version: v /*, board_id: { $in: batchBoardIds } */ } },
-  { $group: { _id: "$board_id", passed: { $max: { $cond: ["$passed", 1, 0] } },
-      attempts: { $sum: { $cond: [{ $eq: ["$stage", "checks"] }, 1, 0] } }, cost: { $sum: { $ifNull: ["$cost_usd", 0] } } } },
-  { $group: { _id: null, boards: { $sum: 1 }, checks_passed: { $avg: "$passed" },
-      attempts_per_board: { $avg: "$attempts" }, cost_per_board_usd: { $avg: "$cost" } } },
+  { $group: { _id: "$board_id", spec_id: { $max: "$spec_id" }, passed: { $max: { $cond: ["$passed", 1, 0] } },
+      attempts: { $sum: { $cond: [{ $eq: ["$stage", "checks"] }, 1, 0] } }, cost: { $sum: { $ifNull: ["$cost_usd", 0] } },
+      check_score: { $max: "$check_score" },
+      finals: { $push: { $cond: [{ $eq: ["$final", true] }, "$quality", "$$REMOVE"] } } } },
 ])
 ```
+`ablations` rows: `{ setup, harness_version, checks_passed, total, avg_attempts, avg_cost_usd, check_score,
+quality_vs_v0?, ts }` (`quality_vs_v0` on the evolved row only, same shape as `quality_vs_parent`).
 *Gap (Arjun):* `npm run ablation` prints its table but doesn't store it, and the bare-model row writes no runs. Until it
 stores results (e.g. an `ablations` collection: `{ setup, harness_version, checks_passed, total, avg_attempts,
 avg_cost_usd, ts }`), show the printed table as fixture data. Also mixing held-out ablation runs into a version's

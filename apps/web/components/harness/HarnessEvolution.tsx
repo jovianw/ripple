@@ -37,6 +37,29 @@ function ScoreDelta({
   );
 }
 
+/** Board quality vs the parent, spec by spec, as the gate measured it (versions gated before this existed show nothing). */
+function QualityChip({ quality, parent }: { quality: HarnessDoc["quality_vs_parent"]; parent: number | null }) {
+  if (!quality || parent === null) return null;
+  if (quality.ratio === null) {
+    return <span className="text-[12px] text-faint">board quality: no shared passing spec</span>;
+  }
+  const pct = (quality.ratio - 1) * 100;
+  const ink = Math.abs(pct) <= 3 ? "text-dim" : pct > 0 ? "text-good" : "text-bad";
+  return (
+    <span className="text-[12px]">
+      <span className="text-faint">board quality </span>
+      <span className={`font-mono ${ink}`}>
+        {pct >= 0 ? "+" : "−"}
+        {Math.abs(pct).toFixed(0)}%
+      </span>
+      <span className="text-faint">
+        {" "}
+        vs v{parent} ({quality.shared} spec{quality.shared === 1 ? "" : "s"})
+      </span>
+    </span>
+  );
+}
+
 export function HarnessEvolution({ versions }: { versions: HarnessDoc[] }) {
   if (versions.length === 0) {
     return <p className="text-[12px] text-ghost">No harness versions stored.</p>;
@@ -93,6 +116,13 @@ export function HarnessEvolution({ versions }: { versions: HarnessDoc[] }) {
                   to={v.scores.checks_passed}
                   format={(n) => `${(n * 100).toFixed(0)}%`}
                 />
+                <ScoreDelta
+                  label="partial credit"
+                  from={parent?.scores?.check_score}
+                  to={v.scores.check_score}
+                  format={(n) => `${(n * 100).toFixed(0)}%`}
+                />
+                <QualityChip quality={v.quality_vs_parent} parent={v.parent} />
                 <ScoreDelta
                   label="attempts"
                   from={parent?.scores?.attempts_per_board}

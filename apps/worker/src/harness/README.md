@@ -84,10 +84,11 @@ the UI.
 
 | Function | Who calls it | Notes |
 |---|---|---|
-| `scoreVersion(version, { boardIds? })` → `Scores \| null` | ablation, UI, gate | From `runs` with that `harness_version`. Per board: passed if any attempt passed; attempts = runs with `stage: "checks"`; cost = sum of every run's `cost_usd`. Averaged over boards: `{ checks_passed, attempts_per_board, cost_per_board_usd, boards }`. `checks_passed` is the share of boards that passed all hidden checks. |
-| `evaluatePending(runBatch)` → `GateDecision \| null` | meta-agent loop, after each `propose()` | Claims the oldest `pending` version nobody else holds (`claimed_by`/`claimed_at`; a claim older than 20 min is retaken), so concurrent `evolve` runs never decide the same version. Parent no longer current, or guardrail violation → `"rejected"` with no batch run. Otherwise runs a batch under the parent (only if it has no scores yet) and under the candidate, then `"kept"` if `isBetter`, else `"rolled_back"`. Only one child is kept per parent (`succeeded_by` on the parent, set atomically); a sibling that also scored better is `"rejected"` as stale. Stores `scores`, `verdict`, `gate_note`, `decided_at` on the version. `null` when nothing claimable is pending. |
+| `scoreVersion(version, { boardIds? })` → `Scores \| null` | ablation, UI, gate | From `runs` with that `harness_version`. Per board: passed if any attempt passed; attempts = runs with `stage: "checks"`; cost = sum of every run's `cost_usd` (coder, critic, optimize); `check_score` = best attempt's partial credit. Averaged over boards: `{ checks_passed, check_score, attempts_per_board, cost_per_board_usd, boards }`, plus `board`: mean `area_mm2`/`density`/`detour`/`vias`/`parts`/`bom_usd` of the passing boards' kept run (`final: true`), `null` when none passed (display only). `checks_passed` is the share of boards that passed all hidden checks. Throws on boards whose runs predate graded scoring (no `spec_id`/`check_score`): rerun them. |
+| `specQuality(version, { boardIds })` → `Map<spec_id, BoardQuality>` | gate, ablation | The kept board's quality per spec, passing boards only. Throws if the batch built a spec twice. |
+| `evaluatePending(runBatch)` → `GateDecision \| null` | meta-agent loop, after each `propose()` | Claims the oldest `pending` version nobody else holds (`claimed_by`/`claimed_at`; a claim older than 20 min is retaken), so concurrent `evolve` runs never decide the same version. Parent no longer current, or guardrail violation → `"rejected"` with no batch run. Otherwise scores the parent on `parentBoardIds` (or runs a parent batch; stored parent scores are never reused, since board quality is compared spec by spec) and runs a batch under the candidate, then `"kept"` if `isBetter`, else `"rolled_back"`. Only one child is kept per parent (`succeeded_by` on the parent, set atomically); a sibling that also scored better is `"rejected"` as stale. Stores `scores`, `quality_vs_parent`, `verdict`, `gate_note`, `decided_at` on the version (and the parent's fresh `scores` if it had none with `check_score`). `null` when nothing claimable is pending. |
 | `guardrailViolations(parent, candidate)` → `string[]` | gate, meta-agent (to pre-check) | Rejects: removing an existing rule; turning off `route_requires_connectivity`; changing `parts_whitelist`; any MCP tools for the coder; non-read-only MCP tools for anyone; `repair_budget` outside 1..6; `split_over_parts` below 4; `lessons_k`/`subcircuits_k` outside 0..10. |
-| `isBetter(candidate, parent)` | gate | More boards passing wins; tie → fewer attempts; tie → lower cost. |
+| `isBetter(candidate, parent, quality)` | gate | Correctness first: more boards passing; tie → higher `check_score` (within `CHECK_SCORE_TIE` 0.02 is a tie); tie → better boards (`quality.ratio`, within `QUALITY_TIE` ±3% or `null` is a tie); tie → fewer attempts; tie → lower cost. |
 
 `runBatch` must have this shape (it's what Arjun's `runBatch(specIds, config)` needs to provide, wrapped in a closure):
 
@@ -95,8 +96,25 @@ the UI.
 type RunBatch = (config: HarnessConfig) => Promise<{ boardIds: string[] }>;
 // every run it writes has harness_version = config.version; use training specs only, never held-out ones
 const decision = await evaluatePending((config) => runBatch(TRAINING_SPEC_IDS, config));
-// { version, parent, verdict: "kept" | "rolled_back" | "rejected", reasons, scores?, parentScores? }
+// { version, parent, verdict: "kept" | "rolled_back" | "rejected", reasons, scores?, parentScores?, quality? }
 ```
+
+### Partial credit and board quality
+
+- **Partial credit** (`check_score` on each run, 0..1): the share of the spec's hidden-check categories the attempt passed
+  (`checkScore` in `checks/run-checks.ts`). A compile failure scores 0. It lives on the run document only, never on the
+  `RunResult` the critic sees.
+- **Board quality** (`quality` on each compiled run, `tools/metrics.ts`): `area_mm2`, `density`, `trace_mm`, `connections`,
+  `detour` (trace length ÷ per-net minimum spanning tree over pad positions; 1.0 = straight lines), `vias`, `parts`,
+  `bom_usd` (whitelist `unit_price_usd`). A board with an off-whitelist part, no sized `<board>` or no connections fails
+  the attempt instead of scoring.
+- **`harness/quality.ts`**: `boardRatio(a, b)` = geometric mean of a/b over area, detour, vias + 1, parts and BOM (above 1 =
+  b is better); `qualityVsParent(candidate, parent)` = median `boardRatio` over the specs both batches passed
+  (`{ ratio, shared }`, `ratio: null` when none). Only boards of the same spec are compared: absolute numbers depend on
+  the spec, and density rewards bigger footprints, so it's reported but never compared.
+- **Optimize pass** (`agents/coder-loop.ts`): after a board passes, one more coder call asks for a smaller, cleaner board
+  with the same parts and connections (run `<board>_optimize`, `stage: "optimize"`, not counted as an attempt). Kept only if
+  it passes and `boardRatio(before, after) > 1`; the kept run gets `final: true`.
 
 Meta-agent loop: `propose(change, rationale)` → `evaluatePending(...)` → read `decision.verdict` / `reasons`. Rejected and
 rolled-back versions stay in `harness_versions` for the config diff view.

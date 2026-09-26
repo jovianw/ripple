@@ -6,7 +6,8 @@ import assert from "node:assert/strict"
 import type { HarnessConfig } from "@ripple/types"
 import type { StoredConfig, StoredRun } from "../db.ts"
 import { BASELINE } from "./config.ts"
-import { evaluatePending, type GateStore, type RunBatch } from "./gate.ts"
+import { evaluatePending, isBetter, scoreVersion, specQuality, type GateStore, type RunBatch } from "./gate.ts"
+import { boardRatio, median, qualityVsParent, type BoardQuality, type RunQuality } from "./quality.ts"
 
 type Filter = Record<string, unknown>
 
@@ -62,6 +63,26 @@ function fakeHarness(seed: StoredConfig[]): GateStore["harness"] {
 }
 
 const cfg = (over: Partial<StoredConfig>): StoredConfig => ({ ...BASELINE, ...over }) as StoredConfig
+
+const QUALITY: RunQuality = { area_mm2: 200, density: 0.2, detour: 1.1, vias: 2, parts: 5, bom_usd: 0.4, trace_mm: 40, connections: 8 }
+/** One board as gate.ts's per-board aggregation returns it. */
+const row = (id: string, spec: string, passed: boolean, over: Partial<{ check_score: number | null; quality: RunQuality }> = {}) => ({
+  _id: id,
+  spec_id: spec,
+  passed: passed ? 1 : 0,
+  attempts: 1,
+  cost: 0.001,
+  check_score: over.check_score === undefined ? (passed ? 1 : 0.5) : over.check_score,
+  finals: passed ? [over.quality ?? QUALITY] : [],
+})
+/** Stand-in for `runs`: answers the gate's aggregation with the rows for the board ids it matches on. */
+function fakeRuns(rows: Record<string, ReturnType<typeof row>>): GateStore["runs"] {
+  return {
+    aggregate: (pipeline: { $match?: { board_id?: { $in: string[] } } }[]) => ({
+      toArray: async () => (pipeline[0].$match?.board_id?.$in ?? Object.keys(rows)).map((id) => rows[id]).filter(Boolean),
+    }),
+  } as unknown as GateStore["runs"]
+}
 const noBatch: RunBatch = () => {
   throw new Error("runBatch should not have been called")
 }
@@ -116,13 +137,14 @@ describe("evaluatePending concurrency", () => {
       cfg({ version: 1, parent: 0, verdict: "pending" }),
       cfg({ version: 2, parent: 0, verdict: "pending" }),
     ])
-    // Every batch scores better than v0, and takes long enough that both callers are past the claim-time check.
-    const better = { checks_passed: 0.9, attempts_per_board: 1, cost_per_board_usd: 0.001, boards: 8 }
-    const runs = { aggregate: () => ({ toArray: async () => [better] }) } as unknown as GateStore["runs"]
-    const s: GateStore = { harness, runs }
-    const slowBatch: RunBatch = async () => {
+    // Every candidate batch passes where v0's failed, and takes long enough that both callers are past the claim-time check.
+    const s: GateStore = {
+      harness,
+      runs: fakeRuns({ p: row("p", "t01", false), b1: row("b1", "t01", true), b2: row("b2", "t01", true) }),
+    }
+    const slowBatch: RunBatch = async (config) => {
       await new Promise((r) => setTimeout(r, 10))
-      return { boardIds: ["b"] }
+      return { boardIds: [config.version === 0 ? "p" : `b${config.version}`] }
     }
 
     const decisions = await Promise.all([
@@ -136,5 +158,74 @@ describe("evaluatePending concurrency", () => {
     assert.match(lost.reasons.join(" "), new RegExp(`stale: .* v${kept.version} is current`))
     assert.equal((await harness.findOne({ version: 0 }))?.succeeded_by, kept.version)
     assert.equal((await harness.findOne({ verdict: "kept" }, { sort: { version: -1 } }))?.version, kept.version)
+  })
+})
+
+describe("isBetter: correctness first, then board quality, then effort", () => {
+  const base = { checks_passed: 0.5, check_score: 0.8, attempts_per_board: 2, cost_per_board_usd: 0.01 }
+  const tie = { ratio: 1, shared: 4 }
+
+  test("more boards passing wins even with worse partial credit and worse boards", () => {
+    assert.equal(isBetter({ ...base, checks_passed: 0.75, check_score: 0.5 }, base, { ratio: 0.5, shared: 4 }), true)
+  })
+  test("partial credit beyond the tie band decides a pass-rate tie", () => {
+    assert.equal(isBetter({ ...base, check_score: 0.85 }, base, { ratio: 0.5, shared: 4 }), true)
+    assert.equal(isBetter({ ...base, check_score: 0.75 }, base, { ratio: 2, shared: 4 }), false)
+  })
+  test("partial credit within the band falls through to board quality", () => {
+    assert.equal(isBetter({ ...base, check_score: 0.81 }, base, { ratio: 1.1, shared: 4 }), true)
+    assert.equal(isBetter({ ...base, check_score: 0.81 }, base, { ratio: 0.9, shared: 4 }), false)
+  })
+  test("board quality within ±3% or with no shared spec falls through to attempts, then cost", () => {
+    assert.equal(isBetter({ ...base, attempts_per_board: 1.5 }, base, { ratio: 0.98, shared: 4 }), true)
+    assert.equal(isBetter({ ...base, attempts_per_board: 2.5 }, base, { ratio: null, shared: 0 }), false)
+    assert.equal(isBetter({ ...base, cost_per_board_usd: 0.005 }, base, tie), true)
+    assert.equal(isBetter(base, base, tie), false)
+  })
+})
+
+describe("board quality", () => {
+  const q: BoardQuality = { area_mm2: 200, detour: 1.2, vias: 3, parts: 5, bom_usd: 0.4 }
+
+  test("boardRatio: identical boards are 1; half the area on one of five measures is 2^(1/5)", () => {
+    assert.equal(boardRatio(q, q), 1)
+    assert.ok(Math.abs(boardRatio(q, { ...q, area_mm2: 100 }) - 2 ** (1 / 5)) < 1e-12)
+    assert.ok(boardRatio(q, { ...q, vias: 0 }) > 1, "via-free compares through vias + 1")
+    assert.throws(() => boardRatio(q, { ...q, bom_usd: 0 }), /bom_usd/)
+  })
+
+  test("qualityVsParent: median over shared specs, null when none are shared", () => {
+    const parent = new Map([["a", q], ["b", q], ["c", q]])
+    const cand = new Map([["a", { ...q, area_mm2: 100 }], ["b", q], ["c", { ...q, area_mm2: 400 }], ["d", q]])
+    assert.deepEqual(qualityVsParent(cand, parent), { ratio: 1, shared: 3 })
+    assert.deepEqual(qualityVsParent(new Map([["x", q]]), parent), { ratio: null, shared: 0 })
+    assert.equal(median([3, 1, 2, 4]), 2.5)
+  })
+})
+
+describe("scoreVersion / specQuality", () => {
+  test("partial credit is averaged over every board, board quality over the passing ones", async () => {
+    const store = { harness: {} as GateStore["harness"], runs: fakeRuns({
+      a: row("a", "t01", true, { quality: { ...QUALITY, area_mm2: 100 } }),
+      b: row("b", "t02", true, { quality: { ...QUALITY, area_mm2: 300 } }),
+      c: row("c", "t03", false, { check_score: 0.25 }),
+    }) }
+    const s = await scoreVersion(1, { boardIds: ["a", "b", "c"], store })
+    assert.ok(s)
+    assert.equal(s.boards, 3)
+    assert.ok(Math.abs(s.checks_passed - 2 / 3) < 1e-12)
+    assert.ok(Math.abs(s.check_score - 0.75) < 1e-12)
+    assert.equal(s.board?.area_mm2, 200)
+    assert.deepEqual([...(await specQuality(1, { boardIds: ["a", "b", "c"], store })).keys()], ["t01", "t02"])
+  })
+
+  test("refuses boards recorded before graded scoring instead of guessing", async () => {
+    const store = { harness: {} as GateStore["harness"], runs: fakeRuns({ old: row("old", "t01", true, { check_score: null }) }) }
+    await assert.rejects(scoreVersion(0, { boardIds: ["old"], store }), /before graded scoring/)
+  })
+
+  test("specQuality refuses a batch that built the same spec twice", async () => {
+    const store = { harness: {} as GateStore["harness"], runs: fakeRuns({ a: row("a", "t01", true), b: row("b", "t01", true) }) }
+    await assert.rejects(specQuality(0, { boardIds: ["a", "b"], store }), /more than one board/)
   })
 })

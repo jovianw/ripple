@@ -11,7 +11,10 @@ import type { RunBoardResult } from "./coder-loop.js";
 
 export const META_SYSTEM = `You are the meta-agent in Ripple, a harness that designs printed circuit boards.
 You read the results of a batch of boards run under the current harness config and propose ONE change to
-that config to raise the pass rate, lower attempts per board, or lower cost — without weakening any check.
+that config — without weakening any check. The config gate judges it in this order: more boards passing every
+hidden check; then higher partial credit (share of checks passed on the boards that still fail); then better
+boards, compared spec by spec (smaller area, routing closer to straight lines, fewer vias, fewer parts, cheaper
+BOM); then fewer attempts per board; then lower cost. Correctness always comes before board quality.
 
 Rules:
 - Propose the smallest change that addresses the most common failure pattern in the batch. If the batch shows
@@ -127,9 +130,21 @@ function summarizeBatch(results: RunBoardResult[]): string {
     .map(([check, n]) => `- ${check}: ${n}/${total} boards`);
 
   const escalations = results.flatMap((r) => r.criticResults.filter((c) => c.escalate).map((c) => c.escalate_reason));
+  const avgPartial = results.reduce((s, r) => s + r.checkScore, 0) / Math.max(1, total);
+
+  const boardLines = results.map((r) => {
+    const head = `- ${r.specId}: ${r.runResult.passed ? "passed" : "failed"}, partial ${(r.checkScore * 100).toFixed(0)}%`;
+    const m = r.runResult.passed ? r.coderResult?.metrics : undefined;
+    if (!m) return head;
+    const opt = r.optimize ? `; optimize pass ${r.optimize.adopted ? "adopted" : "not adopted"}` : "";
+    return `${head}; ${m.area_mm2.toFixed(0)} mm², parts cover ${(m.density * 100).toFixed(0)}%, routing ${m.detour.toFixed(2)}x straight-line, ${m.vias} vias, ${m.parts} parts, BOM $${m.bom_usd.toFixed(2)}${opt}`;
+  });
 
   return `## Batch results
-${passed}/${total} boards passed. Average attempts per board: ${avgAttempts.toFixed(2)}. Average cost per board: $${avgCost.toFixed(4)}.
+${passed}/${total} boards passed. Average partial credit: ${(avgPartial * 100).toFixed(0)}%. Average attempts per board: ${avgAttempts.toFixed(2)}. Average cost per board: $${avgCost.toFixed(4)}.
+
+## Boards (the kept board's size, routing and BOM for the ones that passed)
+${boardLines.join("\n")}
 
 ## Failure counts (by check, most common first)
 ${failureLines.length ? failureLines.join("\n") : "(none — every board passed)"}

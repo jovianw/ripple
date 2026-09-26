@@ -8,6 +8,8 @@ export interface WhitelistedPart {
   kind: string;
   /** tscircuit JSX element the part is written with. */
   element: string;
+  /** Approximate unit price (LCSC, small quantity); scores BOM cost. */
+  unit_price_usd: number;
   /** Props that define the part (footprint, pinLabels, pinAttributes, manufacturerPartNumber). */
   props: Record<string, unknown>;
   /** Example values for the props the coder still supplies (resistance, capacitance...). */
@@ -30,6 +32,8 @@ const file = JSON.parse(readFileSync(new URL("../../../../parts/whitelist.json",
 
 export const PARTS_WHITELIST_VERSION = file.version;
 export const partsWhitelist: WhitelistedPart[] = file.parts;
+const unpriced = partsWhitelist.filter((p) => typeof p.unit_price_usd !== "number" || !(p.unit_price_usd > 0));
+if (unpriced.length) throw new Error(`parts/whitelist.json: no unit_price_usd for ${unpriced.map((p) => p.id).join(", ")}`);
 
 export function getPart(id: string): WhitelistedPart | undefined {
   return partsWhitelist.find((p) => p.id === id);
@@ -56,7 +60,7 @@ export function partsWhitelistPrompt(): string {
   let kind: string | undefined;
   for (const p of partsWhitelist) {
     if (p.kind !== kind) { kind = p.kind; lines.push("", `## ${kind}`); }
-    lines.push(`- ${p.id}: ${p.description}`, `  ${partExample(p)}`);
+    lines.push(`- ${p.id} ($${p.unit_price_usd}): ${p.description}`, `  ${partExample(p)}`);
     if (p.notes) lines.push(`  Note: ${p.notes}`);
   }
   return lines.join("\n");

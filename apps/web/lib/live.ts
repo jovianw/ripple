@@ -28,7 +28,13 @@ export interface HarnessDoc {
     checks_passed?: number;
     attempts_per_board?: number;
     cost_per_board_usd?: number;
+    /** Mean partial credit: share of applied hidden-check categories passed (0..1). */
+    check_score?: number;
+    /** Means over the version's passing boards; null when none passed. */
+    board?: { area_mm2: number; density: number; detour: number; vias: number; parts: number; bom_usd: number } | null;
   };
+  /** The gate's spec-by-spec board comparison with the parent: ratio > 1 means better boards; null when no spec passed under both. */
+  quality_vs_parent?: { ratio: number | null; shared: number };
   context?: Record<string, unknown>;
   workflow?: Record<string, unknown>;
   routing?: Record<string, unknown>;

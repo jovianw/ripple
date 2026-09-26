@@ -1,13 +1,16 @@
 // Board runner: spec -> retrieve memory -> coder -> hidden checker -> store
-// RunResult -> on failure, critic diagnosis feeds the retry -> credit memory
-// on pass. runBoard does one spec; runBatch is the only batch runner — the
-// config gate and the ablation both call it with whatever config they're
-// scoring, not necessarily the current kept one.
+// RunResult -> on failure, critic diagnosis feeds the retry -> on pass, one
+// optimize pass tries a smaller, cleaner board -> credit memory. runBoard does
+// one spec; runBatch is the only batch runner — the config gate and the
+// ablation both call it with whatever config they're scoring, not necessarily
+// the current kept one.
 import { randomUUID } from "node:crypto";
 import type { BoardMetrics, HarnessConfig, RunResult, Spec } from "@ripple/types";
 import { retrieveLessons, retrieveSubcircuits, addLesson, addSubcircuit, markLessonsHelped, markSubcircuitsReused } from "../harness/memory.js";
+import { boardRatio } from "../harness/quality.js";
 import { col } from "../db.js";
 import { createComplete } from "../tools/router.js";
+import type { CircuitMetrics } from "../tools/metrics.js";
 import { runCoder, CoderCompileError, type CoderResult } from "./coder.js";
 import { runCritic, type CriticResult } from "./critic/index.js";
 import specs from "../../../../specs/specs.json" with { type: "json" };
@@ -35,6 +38,18 @@ export interface RunBoardOptions {
   expectedFor?: (circuitJson: unknown) => unknown;
 }
 
+/** What the optimize pass did after the board passed. */
+export interface OptimizeOutcome {
+  /** Kept: it passed and boardRatio(before, after) > 1. */
+  adopted: boolean;
+  /** boardRatio(before, after); null when the optimized board didn't compile or didn't pass. */
+  ratio: number | null;
+  before: CircuitMetrics;
+  /** Undefined when the optimized code didn't compile. */
+  after?: CircuitMetrics;
+  failures: RunResult["failures"];
+}
+
 export interface RunBoardResult {
   specId: string;
   boardId: string;
@@ -45,11 +60,16 @@ export interface RunBoardResult {
   /** Last generated source, including code that didn't compile. */
   source?: string;
   criticResults: CriticResult[];
+  /** Best partial credit over the attempts (0..1); 1 when the board passed. */
+  checkScore: number;
+  /** Set when the board passed. */
+  optimize?: OptimizeOutcome;
 }
 
 type Checks = {
   runChecks: (json: unknown, expected: unknown, meta?: { board_id?: string; harness_version?: number }) => Promise<RunResult>;
   loadExpected: (id: string) => unknown;
+  checkScore: (result: Pick<RunResult, "failures">, expected: unknown) => number;
 };
 
 /** The hidden checker, loaded by path at runtime so checks/ stays out of the worker's build (same as assembler.ts). */
@@ -57,14 +77,8 @@ async function loadChecks(): Promise<Checks> {
   return (await import(new URL("../../../../checks/index.ts", import.meta.url).href)) as Checks;
 }
 
-function toBoardMetrics(m: CoderResult["metrics"]): BoardMetrics {
-  return {
-    area_mm2: m.area_mm2 ?? 0,
-    vias: m.vias,
-    trace_mm: m.trace_mm,
-    // circuit-json has no price field (see metrics.ts) — not derivable yet.
-    bom_usd: 0,
-  };
+function toBoardMetrics(m: CircuitMetrics): BoardMetrics {
+  return { area_mm2: m.area_mm2, vias: m.vias, trace_mm: m.trace_mm, bom_usd: m.bom_usd };
 }
 
 export async function runBoard(specId: string, config: HarnessConfig, opts: RunBoardOptions = {}): Promise<RunBoardResult> {
@@ -78,6 +92,66 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
     ? await Promise.all([retrieveLessons(spec.text, config.context), retrieveSubcircuits(spec.text, config.context)])
     : [[], []];
 
+  // A rerun under the same board id starts over: no earlier run is the kept one any more.
+  if (opts.boardId) await col.runs.updateMany({ board_id: boardId, final: true }, { $unset: { final: "" } });
+
+  /** Hidden checks and partial credit for one compiled design. */
+  const grade = async (coded: CoderResult): Promise<{ runResult: RunResult; checkScore: number }> => {
+    const exp = opts.expectedFor ? opts.expectedFor(coded.circuitJson) : expected;
+    const checked = await checks.runChecks(coded.circuitJson, exp, { board_id: boardId, harness_version: config.version });
+    return {
+      runResult: {
+        ...checked,
+        metrics: toBoardMetrics(coded.metrics),
+        model: coded.model.tier,
+        tokens: coded.model.totalTokens,
+        cost_usd: coded.model.costUsd,
+      },
+      checkScore: checks.checkScore(checked, exp),
+    };
+  };
+  /** Code that doesn't compile or render is a failed attempt, not a crash: record it and let the critic fix it. */
+  const compileFailure = (err: CoderCompileError): RunResult => ({
+    board_id: boardId,
+    harness_version: config.version,
+    stage: "compile",
+    passed: false,
+    failures: [{ check: "compile", detail: err.message }],
+    drc_errors: 0,
+    model: err.model.tier,
+    tokens: err.model.totalTokens,
+    cost_usd: err.model.costUsd,
+    ts: new Date().toISOString(),
+  });
+  const saveRun = (_id: string, run: RunResult, checkScore: number, quality?: CircuitMetrics) =>
+    col.runs.replaceOne(
+      { _id },
+      {
+        ...run,
+        spec_id: specId,
+        check_score: checkScore,
+        ...(quality && { quality }),
+        lessons_used: lessons.map((l) => l._id),
+        subcircuits_used: subcircuits.map((s) => s._id),
+      },
+      { upsert: true },
+    );
+  // Same shape as the finale's final board (docs/frontend-backend.md) —
+  // insertOne with an auto _id, matching the finale pipeline's convention (planned-board.ts):
+  // boards accumulate one doc per attempt, consumers take the latest by created_at.
+  const saveBoard = (run: RunResult, boardSource: string, circuitJson: unknown) =>
+    col.boards.insertOne({
+      board_id: boardId,
+      kind: "single",
+      spec_id: specId,
+      harness_version: config.version,
+      source: boardSource,
+      circuit_json: circuitJson,
+      passed: run.passed,
+      failures: run.failures,
+      created_at: new Date(),
+    });
+
   let coderResult: CoderResult | undefined;
   let runResult: RunResult | undefined;
   let previousFailure: string | undefined;
@@ -85,11 +159,12 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
   let source: string | undefined;
   const criticResults: CriticResult[] = [];
   let attempts = 0;
+  let bestCheckScore = 0;
   const maxAttempts = Math.max(1, config.workflow.repair_budget);
 
   while (attempts < maxAttempts) {
     attempts++;
-    // Code that doesn't compile or render is a failed attempt, not a crash: record it and let the critic fix it.
+    let checkScore = 0;
     try {
       coderResult = await runCoder({
         specText: spec.text,
@@ -99,54 +174,17 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
         previousFailure: config.context.include_last_failure ? previousFailure : undefined,
       });
       source = coderResult.source;
-      const checked = await checks.runChecks(coderResult.circuitJson, opts.expectedFor ? opts.expectedFor(coderResult.circuitJson) : expected, {
-        board_id: boardId,
-        harness_version: config.version,
-      });
-      runResult = {
-        ...checked,
-        metrics: toBoardMetrics(coderResult.metrics),
-        model: coderResult.model.tier,
-        tokens: coderResult.model.totalTokens,
-        cost_usd: coderResult.model.costUsd,
-      };
+      ({ runResult, checkScore } = await grade(coderResult));
     } catch (err) {
       if (!(err instanceof CoderCompileError)) throw err;
       coderResult = undefined;
       source = err.source;
-      runResult = {
-        board_id: boardId,
-        harness_version: config.version,
-        stage: "compile",
-        passed: false,
-        failures: [{ check: "compile", detail: err.message }],
-        drc_errors: 0,
-        model: err.model.tier,
-        tokens: err.model.totalTokens,
-        cost_usd: err.model.costUsd,
-        ts: new Date().toISOString(),
-      };
+      runResult = compileFailure(err);
     }
+    bestCheckScore = Math.max(bestCheckScore, checkScore);
 
-    await col.runs.replaceOne(
-      { _id: `${boardId}_${attempts}` },
-      { ...runResult, lessons_used: lessons.map((l) => l._id), subcircuits_used: subcircuits.map((s) => s._id) },
-      { upsert: true },
-    );
-    // Same shape as the finale's final board (docs/frontend-backend.md), one per attempt —
-    // insertOne with an auto _id, matching the finale pipeline's convention (planned-board.ts):
-    // boards accumulate one doc per attempt, consumers take the latest by created_at.
-    await col.boards.insertOne({
-      board_id: boardId,
-      kind: "single",
-      spec_id: specId,
-      harness_version: config.version,
-      source: source ?? "",
-      circuit_json: coderResult?.circuitJson ?? null,
-      passed: runResult.passed,
-      failures: runResult.failures,
-      created_at: new Date(),
-    });
+    await saveRun(`${boardId}_${attempts}`, runResult, checkScore, coderResult?.metrics);
+    await saveBoard(runResult, source ?? "", coderResult?.circuitJson ?? null);
 
     if (runResult.passed) break;
 
@@ -196,6 +234,39 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
 
   if (!runResult) throw new Error(`runBoard(${specId}) produced no result`);
 
+  // Optimize pass: one more coder call on the passing design, asking for a smaller, cleaner board with the same
+  // parts and connections. Kept only if it still passes every hidden check and is better (harness/quality.ts).
+  // Stage "optimize", so scoreVersion doesn't count it as an attempt; its cost still counts.
+  let optimize: OptimizeOutcome | undefined;
+  let keptRunId = runResult.passed ? `${boardId}_${attempts}` : undefined;
+  if (runResult.passed && coderResult) {
+    const before = coderResult;
+    const optId = `${boardId}_optimize`;
+    let after: CoderResult | undefined;
+    let optRun: RunResult;
+    let optScore = 0;
+    try {
+      after = await runCoder({ specText: spec.text, config, lessons, subcircuits, optimizeFrom: { source: before.source, metrics: before.metrics, circuitJson: before.circuitJson } });
+      ({ runResult: optRun, checkScore: optScore } = await grade(after));
+    } catch (err) {
+      if (!(err instanceof CoderCompileError)) throw err;
+      optRun = compileFailure(err);
+    }
+    optRun = { ...optRun, stage: "optimize" };
+    const ratio = after && optRun.passed ? boardRatio(before.metrics, after.metrics) : null;
+    const adopted = ratio !== null && ratio > 1;
+    await saveRun(optId, optRun, optScore, after?.metrics);
+    optimize = { adopted, ratio, before: before.metrics, after: after?.metrics, failures: optRun.failures };
+    if (adopted && after) {
+      await saveBoard(optRun, after.source, after.circuitJson);
+      coderResult = after;
+      source = after.source;
+      runResult = optRun;
+      keptRunId = optId;
+    }
+  }
+  if (keptRunId) await col.runs.updateOne({ _id: keptRunId }, { $set: { final: true } });
+
   if (runResult.passed && coderResult && writeMemory) {
     await addSubcircuit({
       name: `board_${specId}`,
@@ -207,7 +278,7 @@ export async function runBoard(specId: string, config: HarnessConfig, opts: RunB
     await markSubcircuitsReused(subcircuits.map((s) => s._id));
   }
 
-  return { specId, boardId, attempts, runResult, coderResult, source, criticResults };
+  return { specId, boardId, attempts, runResult, coderResult, source, criticResults, checkScore: bestCheckScore, optimize };
 }
 
 export interface RunBatchOptions extends RunBoardOptions {
@@ -235,6 +306,7 @@ export async function runBatch(specIds: string[], config: HarnessConfig, opts: R
           boardId: boardOpts.boardId ?? "",
           attempts: 0,
           criticResults: [],
+          checkScore: 0,
           runResult: {
             board_id: boardOpts.boardId ?? "",
             harness_version: config.version,
