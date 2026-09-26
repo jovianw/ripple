@@ -17,6 +17,7 @@
     "smoke": "tsx scripts/smoke-board.tsx",
     "verify:parts": "tsx scripts/verify-parts.tsx",
     "test:checks": "TSX_TSCONFIG_PATH=checks/tsconfig.json tsx --test checks/**/*.test.tsx",
+    "test:assembler": "tsx --test apps/worker/src/assembler/assembler.test.ts",
     "try:critic": "tsx --env-file-if-exists=.env scripts/try-critic.tsx"
   },
   "devDependencies": {
