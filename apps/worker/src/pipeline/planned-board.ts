@@ -4,13 +4,27 @@
 //
 // Each subcircuit step stores its code as a `boards` document in the same transaction that marks the step done,
 // so the assemble step (and a restarted worker) reads finished subcircuits back from Atlas, never from memory.
-import type { HarnessConfig, RunResult } from "@ripple/types"
+import type { HarnessConfig, Lesson, RunResult } from "@ripple/types"
 import type { Document } from "mongodb"
 import { col } from "../db.js"
 import { enqueue, progress, runQueue, type Handler } from "../harness/queue.js"
 import { plan, checkInterface, type PlannerDeps, type Plan, type SubcircuitPayload } from "../agents/planner/index.js"
 import type { CoderInput } from "../agents/coder.js"
 import { assemble } from "../assembler/assembler.js"
+import { getPart, partExample } from "../tools/parts-whitelist.js"
+import { evaluateCircuitSource } from "../tools/evaluate.js"
+
+/**
+ * Mechanical fixes to coder output that don't change the design:
+ * - trace-length limits (maxLength, and decouplingFor/decouplingTo, which make tscircuit enforce a ~1mm decoupling
+ *   trace) only ever block the autorouter; the hidden checks verify capacitor placement instead;
+ * - ".R1.pin2" selectors -> ".R1 > .pin2".
+ */
+export function normalizeCoderSource(source: string): string {
+  return source
+    .replace(/\s+(?:maxLength|maxDecouplingTraceLength|decouplingFor|decouplingTo)=(?:"[^"]*"|'[^']*'|\{[^}]*\})/g, "")
+    .replace(/\b(from|to)="\.([A-Za-z_][\w]*)\.([A-Za-z_][\w]*)"/g, '$1=".$2 > .$3"')
+}
 
 type El = { type: string; [k: string]: unknown }
 
@@ -25,6 +39,8 @@ export interface PlannedBoardDeps {
   coder(input: CoderInput): Promise<CoderOutput>
   /** Model call for the planner (Arjun's `complete` adapter), or a stand-in. */
   planner: PlannerDeps
+  /** Lessons relevant to one subcircuit (memory.retrieveLessons); omit for no memory. */
+  lessons?(query: string): Promise<Lesson[]>
   log?: (msg: string) => void
 }
 
@@ -38,7 +54,12 @@ const prefix = (key: string) => key.replace(/[^a-z0-9]/g, "").slice(0, 4).toUppe
 
 /** What the coder is asked to build for one subcircuit. The coder writes a standalone board; we make it a group. */
 export function subcircuitSpec(spec: PlannedBoardSpec, key: string, p: SubcircuitPayload): string {
-  const parts = p.parts.map((x) => `- ${x.qty}x ${x.part}: ${x.for}`).join("\n")
+  // Show the exact JSX for each part: ids like temp_sensor_lm75 are whitelist names, not tscircuit elements.
+  const parts = p.parts.map((x) => {
+    const w = getPart(x.part)
+    const letter = ({ resistor: "R", capacitor: "C", led: "D", pinheader: "J", pushbutton: "SW", crystal: "Y", diode: "D" } as Record<string, string>)[w?.element ?? ""] ?? "U"
+    return `- ${x.qty}x ${x.for}: ${w ? partExample(w, `${prefix(key)}_${letter}1`) : x.part}`
+  }).join("\n")
   const headers = p.headers.map((h) => `- a ${h.labels.length}-pin header with pin labels (${h.labels.join(", ")}), exactly as written`).join("\n")
   return `You are building ONE subcircuit of a larger board, not the whole board.
 
@@ -46,12 +67,16 @@ Whole board (for context only): ${spec.text}
 
 This subcircuit: ${p.purpose}
 
-Parts to use (whitelist ids):
+Parts to use, written exactly like this (change only name and values; ids such as temp_sensor_lm75 are
+whitelist names, never JSX elements):
 ${parts || "- (choose from the whitelist)"}
 ${headers ? `\nHeaders this subcircuit places:\n${headers}\n` : ""}
 Shared nets: connect to the rest of the board ONLY through these named nets, with trace to="net.NAME":
 ${p.nets.length ? p.nets.map((n) => `- net.${n}`).join("\n") : "- (none: this subcircuit is the whole board)"}
 Do not add parts that belong to other subcircuits.
+Give every part an explicit pcbX/pcbY, at least 2mm apart. Do not set maxLength or any other trace constraint:
+place the parts, the autorouter routes. Do not use decouplingFor or decouplingTo on capacitors.
+Reference pins in traces as ".NAME > .PIN" (e.g. ".I2CS_R1 > .pin2"), never ".NAME.PIN".
 Name every component with the prefix ${prefix(key)}_ (e.g. ${prefix(key)}_R1, ${prefix(key)}_U1) so names stay unique on the assembled board.`
 }
 
@@ -111,12 +136,28 @@ export function plannedBoardHandler(spec: PlannedBoardSpec, config: HarnessConfi
 
     // A subcircuit (or the whole board when the plan didn't split).
     const p = payload as SubcircuitPayload
-    const out = await deps.coder({
+    const lessons = deps.lessons ? await deps.lessons(`${p.purpose}. ${p.parts.map((x) => x.part).join(", ")}`) : undefined
+    let out = await deps.coder({
       specText: p.nets.length ? subcircuitSpec(spec, item.key, p) : spec.text,
       config,
+      lessons,
       previousFailure: item.attempts > 1 ? (item as { error?: string }).error : undefined,
     })
-    const errors = out.circuitJson.filter((e) => e.type.endsWith("_error")).map((e) => `${e.type}: ${(e.message as string) ?? ""}`)
+    const normalized = normalizeCoderSource(out.source)
+    if (normalized !== out.source) {
+      out = { ...out, source: normalized, circuitJson: (await evaluateCircuitSource(normalized)).circuitJson as unknown as El[] }
+      deps.log?.(`${item.key}: normalized coder output (trace-length limits, selector syntax)`)
+    }
+    // Shared nets (V3V3, SDA...) only get their other ends at assembly, so a subcircuit routed on its own can't
+    // finish them. Defer "not connected" errors on planned shared nets to the assembled board, which gets full
+    // DRC and the hidden checks; every other render, placement or routing error still fails the step.
+    const shared = new Set(p.nets)
+    const deferred = (e: El) =>
+      e.type === "pcb_port_not_connected_error" &&
+      [...String(e.message ?? "").matchAll(/net \[([^\]]+)\]/g)].some((m) => shared.has(m[1]))
+    const errors = out.circuitJson
+      .filter((e) => e.type.endsWith("_error") && !deferred(e))
+      .map((e) => `${e.type}: ${(e.message as string) ?? ""}`)
     const problems = [...errors, ...checkInterface(p, out.circuitJson as never)]
     if (problems.length) throw new Error(`${item.key}: ${problems.slice(0, 8).join("; ")}`)
     const group_code = boardModuleToGroup(out.source, item.key)
