@@ -3,7 +3,7 @@
 import { Component, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 
-import type { PCBComponent, PCBState } from "@/lib/types";
+import type { PCBSceneProps } from "./PCBScene";
 
 // three touches window/document at import time, so keep it off the server.
 const PCBScene = dynamic(
@@ -44,14 +44,8 @@ class SceneBoundary extends Component<
   }
 }
 
-export function PCBViewport(props: {
-  pcb: PCBState;
-  isRunning: boolean;
-  selectedId: string | null;
-  changedIds: ReadonlySet<string>;
-  snapshotVersion: number;
-  onSelect: (component: PCBComponent | null) => void;
-}) {
+// Props mirror the scene exactly; reusing the type keeps them from drifting.
+export function PCBViewport(props: PCBSceneProps) {
   return (
     <SceneBoundary>
       <PCBScene {...props} />

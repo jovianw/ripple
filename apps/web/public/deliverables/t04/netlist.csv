@@ -1,0 +1,5 @@
+net,pins
+"GND","C1.pin2 J1.GND U1.A0 U1.A1 U1.A2 U1.GND"
+"SCL","J1.SCL R2.pin1 U1.SCL"
+"SDA","J1.SDA R1.pin1 U1.SDA"
+"V3V3","C1.pin1 J1.3V3 R1.pin2 R2.pin2 U1.VCC"

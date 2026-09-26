@@ -51,6 +51,9 @@ Check tscircuit works: `npm run smoke` renders `examples/led-board.tsx` through 
 | `npm run smoke t03` | Reference USB-C → 3.3V board (hidden) through autorouter + DRC |
 | `npm run verify:parts` | Renders every whitelisted part |
 | `npm run test:checks` | Hidden checker tests (good boards pass, broken boards fail) |
+| `npm run export <board>` | All deliverables (Gerbers, BOM, KiCad, 3D, images, report) to `out/<board>/` and zips |
+| `npm run test:planner` / `test:assembler` / `test:export` | Planner, assembler, deliverables tests |
+| `npm run try:critic` / `try:planner` | One real model call each (cheap model, ~1 cent) |
 | `npm run green` | Checks Atlas writer, read-only reader, Voyage, OpenRouter + LangSmith |
 | `npm run setup:indexes` / `npm run seed:config` | Atlas collections and indexes / harness config v0 (both done; safe to re-run) |
 | `npm run queue:demo` | Work-queue kill-and-resume demo (Ctrl+C mid-run, rerun, it resumes) |

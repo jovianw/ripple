@@ -72,8 +72,32 @@ const next = await propose(
 ```
 
 Verdicts: `"kept"` (current if newest), `"pending"` (proposed, not yet scored), `"rolled_back"` (scored worse),
-`"rejected"` (would weaken a check). The config gate that sets these is being built (DESIGN.md §6, Jovian 2:00–3:00); until
-it lands, proposals stay `pending` and `currentConfig()` doesn't change.
+`"rejected"` (breaks a guardrail). `harness/gate.ts` sets them (below); proposals stay `pending` and `currentConfig()`
+doesn't change until the gate runs.
+
+## `harness/gate.ts`: scoring and the config gate
+
+The gate never calls models. Arjun's batch runner is passed in, so the same scoring serves the gate, the ablation table and
+the UI.
+
+| Function | Who calls it | Notes |
+|---|---|---|
+| `scoreVersion(version, { boardIds? })` → `Scores \| null` | ablation, UI, gate | From `runs` with that `harness_version`. Per board: passed if any attempt passed; attempts = runs with `stage: "checks"`; cost = sum of every run's `cost_usd`. Averaged over boards: `{ checks_passed, attempts_per_board, cost_per_board_usd, boards }`. `checks_passed` is the share of boards that passed all hidden checks. |
+| `evaluatePending(runBatch)` → `GateDecision \| null` | meta-agent loop, after each `propose()` | Takes the oldest `pending` version. Guardrail violation → `"rejected"` with no batch run. Otherwise runs a batch under the parent (only if it has no scores yet) and under the candidate, then `"kept"` if `isBetter`, else `"rolled_back"`. Stores `scores`, `verdict`, `gate_note`, `decided_at` on the version. `null` when nothing is pending. |
+| `guardrailViolations(parent, candidate)` → `string[]` | gate, meta-agent (to pre-check) | Rejects: removing an existing rule; turning off `route_requires_connectivity`; changing `parts_whitelist`; any MCP tools for the coder; non-read-only MCP tools for anyone; `repair_budget` outside 1..6; `split_over_parts` below 4; `lessons_k`/`subcircuits_k` outside 0..10. |
+| `isBetter(candidate, parent)` | gate | More boards passing wins; tie → fewer attempts; tie → lower cost. |
+
+`runBatch` must have this shape (it's what Arjun's `runBatch(specIds, config)` needs to provide, wrapped in a closure):
+
+```ts
+type RunBatch = (config: HarnessConfig) => Promise<{ boardIds: string[] }>;
+// every run it writes has harness_version = config.version; use training specs only, never held-out ones
+const decision = await evaluatePending((config) => runBatch(TRAINING_SPEC_IDS, config));
+// { version, parent, verdict: "kept" | "rolled_back" | "rejected", reasons, scores?, parentScores? }
+```
+
+Meta-agent loop: `propose(change, rationale)` → `evaluatePending(...)` → read `decision.verdict` / `reasons`. Rejected and
+rolled-back versions stay in `harness_versions` for the config diff view.
 
 ## `harness/memory.ts`: lessons, subcircuits, similar failures
 
@@ -132,7 +156,7 @@ Queue item fields beyond `WorkItem` (`_id` is `"<board_id>:<key>"`): `key`, `ste
 `finished_at`, `error`. `heartbeat` is an ISO string refreshed every 5 s; items whose worker stops heartbeating for 30 s
 are put back as pending.
 
-## Coming next (Jovian, 2:00–3:00)
+## Coming next (Jovian)
 
-- Config gate: score a `pending` version on a test batch, then keep it, roll it back, or reject it if it weakens a check.
-- Change-stream triggers: run the critic when a run fails and the meta-agent when a batch finishes.
+- Change streams: meta-agent trigger when a batch finishes, and a runs feed helper for the UI. No critic trigger: Arjun's
+  loop calls the critic directly.
