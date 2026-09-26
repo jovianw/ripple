@@ -5,7 +5,7 @@
 // request. It never affects the scripted view — if Atlas or the worker is down,
 // it says so here and the demo carries on (docs/frontend-backend.md §5).
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 interface RequestState {
@@ -33,6 +33,19 @@ export function RealBuildStatus({
 }) {
   const [req, setReq] = useState<RequestState | null>(null);
 
+  // The callbacks come from the parent as inline arrows, so their identity
+  // changes on every render. Holding them in refs keeps them out of the
+  // effect's dependencies — otherwise each status update tears the poller
+  // down and restarts it, and the in-flight request carrying `done` is
+  // discarded by the stale closure's `stopped` flag. That is exactly how a
+  // finished build ended up never reaching the scene.
+  const onBoardRef = useRef(onBoard);
+  const onStatusRef = useRef(onStatus);
+  useEffect(() => {
+    onBoardRef.current = onBoard;
+    onStatusRef.current = onStatus;
+  }, [onBoard, onStatus]);
+
   useEffect(() => {
     if (!requestId) return;
     let stopped = false;
@@ -41,10 +54,12 @@ export function RealBuildStatus({
       const json = (await r?.json().catch(() => null)) as RequestState | null;
       if (stopped || !json || !("status" in json)) return;
       setReq(json);
-      if (json.status === "queued" || json.status === "running") onStatus?.(json.status);
+      if (json.status === "queued" || json.status === "running")
+        onStatusRef.current?.(json.status);
       if (json.status === "done" || json.status === "failed") {
         stopped = true;
-        if (json.status === "done" && json.board_id) onBoard?.(json.board_id);
+        if (json.status === "done" && json.board_id)
+          onBoardRef.current?.(json.board_id);
       }
     };
     const first = setTimeout(poll, 0);
@@ -54,7 +69,7 @@ export function RealBuildStatus({
       clearTimeout(first);
       clearInterval(timer);
     };
-  }, [requestId, onBoard, onStatus]);
+  }, [requestId]);
 
   if (!requestId) return note ? <p className="mt-1 text-[11px] text-faint">{note}</p> : null;
 

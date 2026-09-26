@@ -230,6 +230,17 @@ export function RippleDashboard() {
       return () => clearTimeout(kickoff);
     }
 
+    // ?request=<id> attaches to a build already in flight, so a refresh mid
+    // build reconnects instead of losing it.
+    const request = params.get("request");
+    if (request) {
+      const kickoff = setTimeout(() => {
+        setAwaiting("queued");
+        setRequestId(request);
+      }, 0);
+      return () => clearTimeout(kickoff);
+    }
+
     if (params.get("autoplay") !== "1") return;
     const kickoff = setTimeout(() => void build(), 400);
     return () => clearTimeout(kickoff);
