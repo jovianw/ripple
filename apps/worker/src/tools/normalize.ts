@@ -7,12 +7,14 @@
  * - trace-length limits only ever block the autorouter. tscircuit gives every power-to-ground capacitor a 1mm
  *   maximum trace automatically, so each capacitor gets an explicit, generous maxDecouplingTraceLength; coder-set
  *   maxLength/decouplingFor/decouplingTo are removed. The hidden checks still enforce the 3mm placement rule.
- * - ".R1.pin2" selectors -> ".R1 > .pin2"; numeric pinLabels keys ("1") -> "pin1".
+ * - ".R1.pin2" selectors -> ".R1 > .pin2"; numeric pinLabels keys ("1") -> "pin1"; pcbX={{12}} -> pcbX={12}.
  */
 export function normalizeCoderSource(source: string): string {
   return source
     .replace(/\s+(?:maxLength|maxDecouplingTraceLength|decouplingFor|decouplingTo)=(?:"[^"]*"|'[^']*'|\{[^}]*\})/g, "")
     .replace(/<capacitor\b/g, "<capacitor maxDecouplingTraceLength={1000}")
+    // pcbX={{12}} (a coder copying JSX from fix text) doesn't compile: one pair of braces.
+    .replace(/\b(pcbX|pcbY|pcbRotation)=\{\{\s*(-?[\d.]+)\s*\}\}/g, "$1={$2}")
     .replace(/\b(from|to)="\.([A-Za-z_][\w]*)\.([A-Za-z_][\w]*)"/g, '$1=".$2 > .$3"')
     // pinLabels={{"1":"MISO"}} -> pinLabels={{"pin1":"MISO"}}: tscircuit ignores numeric keys.
     .replace(/pinLabels=\{\{([^}]*)\}\}/g, (_m, body: string) =>
@@ -22,6 +24,26 @@ export function normalizeCoderSource(source: string): string {
 /** The same code with the coder's positions removed, so tscircuit places the parts itself (no overlaps). */
 export function withoutPlacement(source: string): string {
   return source.replace(/\s+(?:pcbX|pcbY|pcbRotation)=(?:"[^"]*"|'[^']*'|\{[^}]*\})/g, "")
+}
+
+const POSITION = /\s+(?:pcbX|pcbY|pcbRotation)=(?:"[^"]*"|'[^']*'|\{[^}]*\})/g
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+/**
+ * A repair edits code whose parts are all pinned (bakePlacement). If the coder drops a part's pcbX/pcbY while
+ * editing, that part lands at the origin on top of others; put back the position it had in `previous`.
+ */
+export function keepPlacement(source: string, previous: string): string {
+  let out = source
+  for (const tag of previous.match(/<[A-Za-z]+\b[^>]*?\bname=["'][^"']+["'][^>]*>/g) ?? []) {
+    const name = tag.match(/\bname=["']([^"']+)["']/)![1]
+    const attrs = (tag.match(POSITION) ?? []).join("")
+    if (!attrs) continue
+    const current = out.match(new RegExp(`<[A-Za-z]+\\b[^>]*?\\bname=["']${esc(name)}["'][^>]*>`))?.[0]
+    if (!current || /\bpcbX=/.test(current)) continue
+    out = out.replace(current, current.replace(/(\bname=["'][^"']+["'])/, `$1${attrs}`))
+  }
+  return out
 }
 
 type El = { type: string; [k: string]: any }
