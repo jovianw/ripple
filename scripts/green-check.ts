@@ -50,7 +50,7 @@ await check("atlas", async () => {
 
 await check("reader", async () => {
   const [uri] = env("MONGODB_URI_READER");
-  const client = new MongoClient(uri, { appName: "board-forge-green-check" });
+  const client = new MongoClient(uri, { appName: "ripple-green-check" });
   try {
     const db = client.db(process.env.MONGODB_DB || "ripple");
     await db.command({ ping: 1 });

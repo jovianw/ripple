@@ -1,7 +1,7 @@
 // Atlas connection for the worker (writer user). Owner: Jovian.
 // The worker is the only process that writes design state.
 import { MongoClient } from "mongodb";
-import type { HarnessConfig, RunResult } from "@board-forge/types";
+import type { HarnessConfig, RunResult } from "@ripple/types";
 
 const uri = process.env.MONGODB_URI;
 if (!uri) throw new Error("MONGODB_URI is not set; copy .env.example to .env");
@@ -16,7 +16,7 @@ export const COLLECTIONS = [
   "lessons",
 ] as const;
 
-export const client = new MongoClient(uri, { appName: "board-forge-worker" });
+export const client = new MongoClient(uri, { appName: "ripple-worker" });
 export const db = client.db(process.env.MONGODB_DB || "ripple");
 
 export const col = {

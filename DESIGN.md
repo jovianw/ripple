@@ -1,4 +1,4 @@
-# Board Forge: Design Doc
+# Ripple: Design Doc
 
 > A self-improving harness that designs circuit boards from a spec, checks them against a hidden spec it never sees, and redesigns itself based on what fails.
 >
@@ -10,7 +10,7 @@
 
 ## 1. Overview
 
-Board Forge has two layers.
+Ripple has two layers.
 
 - **The harness** turns an English spec (for example, "read a temperature sensor over I2C, powered from USB-C, with a status LED") into a routed PCB written in [tscircuit](https://tscircuit.com). Agents plan, write, and repair the board; deterministic tools compile, autoroute, and check it; verified subcircuits go into a reusable library.
 - **The meta-harness** treats the harness itself as something to optimize. It runs batches of specs, reads the failures, proposes changes to the harness config (rules, context policy, tool access, workflow, model routing), and keeps a change only if scores improve on the next batch.
@@ -19,7 +19,7 @@ MongoDB Atlas is the memory and state layer for both: every spec, board, subcirc
 
 ### Problem statements
 
-| Statement | How Board Forge addresses it |
+| Statement | How Ripple addresses it |
 |---|---|
 | **One: Recursive Harnessing** | The harness config is a versioned document. A meta-agent rewrites its rules, context policy, tool access, workflow, and model routing; a config gate keeps, rolls back, or rejects each change. |
 | **Two: Long Horizon Engineering** | Large boards are split into a work queue of subcircuits, built and verified step by step, checkpointed throughout, and resumable after a crash. Context never grows: every call is rebuilt from Atlas. |
@@ -185,7 +185,7 @@ Values are illustrative.
 ### Repo layout
 
 ```
-board-forge/
+ripple/
   apps/
     worker/        # harness: agents/, tools/, harness/, db.ts
     web/           # Next.js UI
@@ -208,7 +208,7 @@ VOYAGE_API_KEY=
 VOYAGE_MODEL=
 LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=
-LANGSMITH_PROJECT=board-forge
+LANGSMITH_PROJECT=ripple
 ```
 
 `.env`, `.mcp.json`, and editor MCP config folders are in `.gitignore`.
@@ -342,7 +342,7 @@ Times are for Sept 26. Checkpoints are shared; everything else has one owner.
 | Who attends MongoDB.local (Sept 30, 10 AM–4:30 PM) if we're top 6 | Today | — |
 
 ### Related work
-[Strands Harness Optimizer](https://github.com/strands-labs/harness-optimizer) tunes an agent's context (system prompt, tool docs, skills) from rollouts and rewards. Board Forge evolves the whole harness, including tool access, workflow, repair budgets, and model routing; refuses changes that weaken its own checks; keeps every version in Atlas; and runs long jobs that survive a crash.
+[Strands Harness Optimizer](https://github.com/strands-labs/harness-optimizer) tunes an agent's context (system prompt, tool docs, skills) from rollouts and rewards. Ripple evolves the whole harness, including tool access, workflow, repair budgets, and model routing; refuses changes that weaken its own checks; keeps every version in Atlas; and runs long jobs that survive a crash.
 
 ---
 

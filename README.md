@@ -1,4 +1,4 @@
-# Board Forge
+# Ripple
 
 A self-improving harness that designs circuit boards from a spec, checks them against a hidden spec it never sees, and redesigns itself based on what fails.
 

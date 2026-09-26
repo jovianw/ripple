@@ -1,9 +1,9 @@
 {
-  "name": "@board-forge/worker",
+  "name": "@ripple/worker",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@board-forge/types": "*",
+    "@ripple/types": "*",
     "langsmith": "0.10.5",
     "mongodb": "7.6.0"
   }

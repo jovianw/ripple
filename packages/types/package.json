@@ -1,5 +1,5 @@
 {
-  "name": "@board-forge/types",
+  "name": "@ripple/types",
   "private": true,
   "type": "module",
   "main": "dist/index.js",

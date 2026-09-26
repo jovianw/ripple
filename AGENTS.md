@@ -4,7 +4,7 @@ Guide for coding agents working in this repo. Read before making changes.
 
 ## Project
 
-Board Forge: a self-improving harness that designs PCBs (tscircuit) from an English spec, grades them against hidden checks, and evolves its own config. Full design: [DESIGN.md](DESIGN.md). Team brief: [docs/board_forge_pcb_brief_V2.pdf](docs/board_forge_pcb_brief_V2.pdf).
+Ripple: a self-improving harness that designs PCBs (tscircuit) from an English spec, grades them against hidden checks, and evolves its own config. Full design: [DESIGN.md](DESIGN.md). Team brief: [docs/board_forge_pcb_brief_V2.pdf](docs/board_forge_pcb_brief_V2.pdf).
 
 ## Who owns what
 
@@ -23,7 +23,7 @@ Per-person task list and timings: DESIGN.md §6.
 ## Rules
 
 - **Contracts are frozen.** `HarnessConfig` and `RunResult` in `packages/types` change only with team agreement.
-- **Hidden checks stay hidden.** Nothing in `checks/` may reach Board Forge's runtime agents: no imports into prompts, retrieval, Atlas, or MCP. Only Marcos edits `checks/`.
+- **Hidden checks stay hidden.** Nothing in `checks/` may reach Ripple's runtime agents: no imports into prompts, retrieval, Atlas, or MCP. Only Marcos edits `checks/`.
 - **One writer.** Only the worker writes to Atlas. The web app and MCP server use `MONGODB_URI_READER`.
 - **No secrets in git.** Keys live in `.env` (gitignored). Never commit `.env`, `.mcp.json`, or API keys; share keys privately.
 - **Watch OpenRouter spend.** Shared budget is $100 for the day. Log cost per call; use cheap models while developing.
