@@ -22,6 +22,8 @@ export type StoredWorkItem = WorkItem & {
 export type StoredLesson = Lesson & { active: boolean; created_at: Date };
 export type StoredSubcircuit = Subcircuit & { description: string; created_at: Date };
 export type StoredRun = RunResult & { _id?: string; embedding?: number[]; failure_summary?: string };
+/** A config version plus what the gate recorded when it decided. */
+export type StoredConfig = HarnessConfig & { gate_note?: string; decided_at?: string };
 
 const uri = process.env.MONGODB_URI;
 if (!uri) throw new Error("MONGODB_URI is not set; copy .env.example to .env");
@@ -40,7 +42,7 @@ export const client = new MongoClient(uri, { appName: "ripple-worker" });
 export const db = client.db(process.env.MONGODB_DB || "ripple");
 
 export const col = {
-  harness: db.collection<HarnessConfig>("harness_versions"),
+  harness: db.collection<StoredConfig>("harness_versions"),
   specs: db.collection("specs"),
   subcircuits: db.collection<StoredSubcircuit>("subcircuits"),
   boards: db.collection("boards"),
