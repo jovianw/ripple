@@ -1,7 +1,7 @@
 // Spec requests (docs/frontend-backend.md §5).
 //
 //   GET  /api/spec   -> { specs, requests, worker }   (read-only user)
-//   POST /api/spec   { spec_id } -> 202 { request_id } (inserted with the requester user)
+//   POST /api/spec   { spec_id } | { text } -> 202 { request_id } (inserted with the requester user)
 //
 // The web app never runs anything itself: `npm run worker` on the demo laptop claims
 // queued requests through a change stream and writes runs, boards and status.
@@ -50,13 +50,19 @@ export async function POST(request: Request) {
   if (!requestsConfigured()) {
     return NextResponse.json({ error: "Spec submission isn't configured on this deployment" }, { status: 503 });
   }
-  const body = (await request.json().catch(() => null)) as { spec_id?: unknown } | null;
+  const body = (await request.json().catch(() => null)) as { spec_id?: unknown; text?: unknown } | null;
   const specId = typeof body?.spec_id === "string" ? body.spec_id.trim() : "";
-  if (!specId) return NextResponse.json({ error: "spec_id is required" }, { status: 400 });
+  const text = typeof body?.text === "string" ? body.text.trim() : "";
+  if (!specId && !text) return NextResponse.json({ error: "send spec_id or text" }, { status: 400 });
+  if (text && (text.length < 10 || text.length > 1000)) {
+    return NextResponse.json({ error: "describe the board in 10 to 1000 characters" }, { status: 400 });
+  }
 
   try {
-    const known = await db().collection("specs").countDocuments({ _id: specId as never }, { limit: 1 });
-    if (!known) return NextResponse.json({ error: `Unknown spec ${specId}` }, { status: 400 });
+    if (specId) {
+      const known = await db().collection("specs").countDocuments({ _id: specId as never }, { limit: 1 });
+      if (!known) return NextResponse.json({ error: `Unknown spec ${specId}` }, { status: 400 });
+    }
 
     const requests = requestsCollection();
     const pending = await requests.countDocuments({ status: { $in: ["queued", "running"] } });
@@ -65,7 +71,7 @@ export async function POST(request: Request) {
     }
 
     const { insertedId } = await requests.insertOne({
-      spec_id: specId,
+      ...(specId ? { spec_id: specId } : { text }),
       status: "queued",
       created_at: new Date().toISOString(),
       source: "web",

@@ -4,7 +4,8 @@
 // New requests arrive through an Atlas change stream; a slow poll backs it up in case the stream drops.
 import { setTimeout as sleep } from "node:timers/promises";
 import { col, type SpecRequest } from "../db.js";
-import { abandoned, defaultWorkerId } from "./queue.js";
+import { hostname } from "node:os";
+import { defaultWorkerId, releaseAbandoned } from "./queue.js";
 
 const HEARTBEAT_MS = 5_000;
 const STALE_MS = 60_000;
@@ -18,14 +19,9 @@ export type RequestHandler = (
 
 /** Requests this worker was running when it died, and anyone's whose heartbeat went stale, go back to queued. */
 export async function recoverRequests(workerId = defaultWorkerId()) {
-  const running = await col.requests.find({ status: "running" }, { projection: { claimed_by: 1, claimed_pid: 1, heartbeat: 1 } }).toArray();
-  const ids = running.filter((r) => abandoned(r, workerId, STALE_MS)).map((r) => r._id!);
-  if (!ids.length) return 0;
-  const res = await col.requests.updateMany(
-    { _id: { $in: ids }, status: "running" },
-    { $set: { status: "queued" }, $unset: { claimed_by: "", claimed_pid: "" } },
-  );
-  return res.modifiedCount;
+  void workerId; // ownership is decided by host + pid (see queue.ts abandoned)
+  const running = await col.requests.find({ status: "running" }, { projection: { claimed_host: 1, claimed_pid: 1, heartbeat: 1 } }).toArray();
+  return releaseAbandoned(col.requests as never, running.map((r) => ({ ...r, _id: r._id! })), STALE_MS, "queued");
 }
 
 /** Atomically claims the oldest queued request. */
@@ -33,7 +29,7 @@ export function claimRequest(workerId = defaultWorkerId()) {
   const t = now();
   return col.requests.findOneAndUpdate(
     { status: "queued" },
-    { $set: { status: "running", claimed_by: workerId, claimed_pid: process.pid, started_at: t, heartbeat: t } },
+    { $set: { status: "running", claimed_by: workerId, claimed_pid: process.pid, claimed_host: hostname(), started_at: t, heartbeat: t } },
     { sort: { created_at: 1 }, returnDocument: "after" },
   );
 }
@@ -46,11 +42,11 @@ async function runOne(req: SpecRequest & { _id: NonNullable<SpecRequest["_id"]> 
       await col.requests.updateOne(mine, { $set: { board_id, harness_version } });
     };
     const { passed, attempts } = await handler(req, setBoard);
-    await col.requests.updateOne(mine, { $set: { status: "done", passed, attempts, finished_at: now() }, $unset: { claimed_by: "", claimed_pid: "" } });
+    await col.requests.updateOne(mine, { $set: { status: "done", passed, attempts, finished_at: now() }, $unset: { claimed_by: "", claimed_pid: "", claimed_host: "" } });
     return passed;
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
-    await col.requests.updateOne(mine, { $set: { status: "failed", error: error.slice(0, 500), finished_at: now() }, $unset: { claimed_by: "", claimed_pid: "" } });
+    await col.requests.updateOne(mine, { $set: { status: "failed", error: error.slice(0, 500), finished_at: now() }, $unset: { claimed_by: "", claimed_pid: "", claimed_host: "" } });
     throw err;
   } finally {
     clearInterval(beat);

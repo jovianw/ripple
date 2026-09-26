@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ExecutionTrace } from "@/components/activity/ExecutionTrace";
 import { DeliverablesPanel } from "@/components/deliverables/DeliverablesPanel";
 import { HistoryGraph } from "@/components/build/HistoryGraph";
+import { RealBuildStatus } from "@/components/build/RealBuildStatus";
 import { SpecificationBar } from "@/components/build/SpecificationBar";
 import { StageRibbon } from "@/components/build/StageRibbon";
 import { Telemetry } from "@/components/build/Telemetry";
@@ -92,6 +93,27 @@ export function RippleDashboard() {
       );
     }
   }, [clearTimers]);
+
+  // Build also sends the specification to the real worker. Fire and forget: the
+  // scripted run above never waits on Atlas, so a missing worker can't stall the demo.
+  const [requestId, setRequestId] = useState<string | null>(null);
+  const [requestNote, setRequestNote] = useState<string | null>(null);
+  const build = useCallback(() => {
+    runDemo();
+    setRequestId(null);
+    setRequestNote(null);
+    fetch("/api/spec", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: prompt }),
+    })
+      .then(async (r) => {
+        const json = await r.json().catch(() => null);
+        if (r.ok && json?.request_id) setRequestId(json.request_id);
+        else setRequestNote(`Real build not sent: ${json?.error ?? r.statusText}`);
+      })
+      .catch(() => setRequestNote("Real build not sent: the server is unreachable"));
+  }, [runDemo, prompt]);
 
   const reset = useCallback(() => {
     clearTimers();
@@ -302,11 +324,12 @@ export function RippleDashboard() {
             <SpecificationBar
               value={prompt}
               onChange={setPrompt}
-              onBuild={runDemo}
+              onBuild={build}
               onReset={reset}
               isRunning={isRunning}
               hasRun={revealed > 0}
             />
+            <RealBuildStatus requestId={requestId} note={requestNote} />
           </div>
 
           {revealed > 0 ? (

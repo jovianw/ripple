@@ -1,8 +1,9 @@
 // Long-running worker for spec requests from the web app (see apps/worker/src/harness/requests.ts).
 //   npm run worker
 // A request `{ spec_id }` runs that spec under the current config: training/held-out specs through Arjun's runBoard,
-// "finale" through Marcos's planned-board pipeline (work queue, kill-and-resume). Free-text requests need Arjun's
-// ad-hoc runBoard and fail with a clear message until it lands. One request at a time (model budget).
+// "finale" through Marcos's planned-board pipeline (work queue, kill-and-resume). Free text `{ text }` runs through the
+// same loop with generic checks built from the board (Marcos's `genericExpected` in checks/ once it exists; DRC only
+// until then) and never writes the memory library. One request at a time (model budget).
 // Ctrl+C stops it; restarting picks up interrupted requests.
 import { randomUUID } from "node:crypto";
 import specs from "../specs/specs.json" with { type: "json" };
@@ -16,7 +17,11 @@ import { defaultWorkerId } from "../apps/worker/src/harness/queue.ts";
 // Dynamic imports: scripts/tsconfig.json can't statically walk tscircuit (same as scripts/ablation.ts).
 const load = (p: string) => import(new URL(p, import.meta.url).href);
 const { runBoard } = (await load("../apps/worker/src/agents/coder-loop.ts")) as {
-  runBoard: (specId: string, config: HarnessConfig, opts: { boardId: string; writeMemory: boolean }) =>
+  runBoard: (
+    specId: string,
+    config: HarnessConfig,
+    opts: { boardId: string; writeMemory: boolean; spec?: { _id: string; text: string; split: "train" }; expectedFor?: (cj: unknown) => unknown },
+  ) =>
     Promise<{ boardId: string; attempts: number; runResult: { passed: boolean } }>;
 };
 const { runPlannedBoard } = (await load("../apps/worker/src/pipeline/planned-board.ts")) as {
@@ -27,6 +32,10 @@ const { createComplete } = (await load("../apps/worker/src/tools/router.ts")) as
   createComplete: (role: "planner", config: HarnessConfig) => unknown;
 };
 const { runCoder } = (await load("../apps/worker/src/agents/coder.ts")) as { runCoder: (input: unknown) => Promise<unknown> };
+const checks = (await load("../checks/index.ts")) as { genericExpected?: (circuitJson: unknown) => unknown };
+// Free text has no hidden-check file. Generic checks come from the board itself; until Marcos's lands, DRC only
+// (runChecks always runs DRC).
+const genericExpected = (circuitJson: unknown) => checks.genericExpected?.(circuitJson) ?? {};
 
 const SPECS = specs as { _id: string; split: string; text: string }[];
 const log = (m: string) => console.log(`${new Date().toISOString().slice(11, 19)} ${m}`);
@@ -43,7 +52,20 @@ log(`worker ${defaultWorkerId()} waiting for spec requests`);
 await serveRequests(
   async (req, setBoard) => {
     const config = await currentConfig();
-    if (!req.spec_id) throw new Error("free-text specs aren't supported yet (waiting on ad-hoc runBoard); send a spec_id");
+    if (!req.spec_id) {
+      const text = (req.text ?? "").trim();
+      if (!text) throw new Error("request has neither spec_id nor text");
+      const specId = `adhoc-${String(req._id).slice(-6)}`;
+      const boardId = req.board_id ?? `req-${String(req._id).slice(-6)}-${randomUUID().slice(0, 8)}`;
+      await setBoard(boardId, config.version);
+      const r = await runBoard(specId, config, {
+        boardId,
+        writeMemory: false, // ungraded by hidden checks: never enters the subcircuit library
+        spec: { _id: specId, text, split: "train" },
+        expectedFor: genericExpected,
+      });
+      return { passed: r.runResult.passed, attempts: r.attempts };
+    }
 
     if (req.spec_id === finaleSpec._id) {
       const boardId = `finale-req-${String(req._id).slice(-6)}`;
