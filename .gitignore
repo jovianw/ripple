@@ -2,6 +2,9 @@ node_modules
 dist/
 .next/
 *.tsbuildinfo
+bun.lock
+bun.lockb
+bunfig.toml
 
 # secrets and MCP config (never commit)
 .env

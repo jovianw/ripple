@@ -2,16 +2,18 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
-  },
-  "include": [
-    "src"
-  ],
-  "references": [
-    {
-      "path": "../../packages/types"
+    "outDir": "dist",
+    "jsx": "react-jsx",
+    "types": ["tscircuit", "node"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@tscircuit/fanout-solver": ["./src/types/fanout-solver-shim.d.ts"]
     }
-  ],
+  },
+  "include": ["src"],
+  "references": [{ "path": "../../packages/types" }],
   "exclude": [
     "src/**/*.test.ts",
     "src/**/*.test.tsx"
