@@ -150,12 +150,16 @@ export function RippleDashboard() {
     const version = current.version;
     const out: RippleEvent[] = [];
 
+    // Routine placement does not ripple — a ring on every part that lands is
+    // noise, and it spends the motif on the least interesting moment. Only the
+    // repair part earns one.
     for (const c of diff.addedComponents) {
+      if (c.placedDuring !== "repair") continue;
       out.push({
         id: `${version}:add:${c.id}`,
         x: c.position.x,
         y: c.position.y,
-        tone: c.placedDuring === "repair" ? "repair" : "place",
+        tone: "repair",
       });
     }
     for (const c of diff.changedComponents) {
