@@ -22,6 +22,8 @@ Per-person task list and timings: DESIGN.md §6.
 
 **Atlas, harness config, memory, work queue:** use the APIs in [apps/worker/src/harness/README.md](apps/worker/src/harness/README.md) (`currentConfig`, `propose`, `retrieveLessons`, `addLesson`, `retrieveSubcircuits`, `enqueue`, `runQueue`, ...). Read it before touching Atlas from worker code; don't query or write the collections directly when a function exists.
 
+**Web app (`apps/web`) reading backend data:** [docs/frontend-backend.md](docs/frontend-backend.md): read-only connection, what each collection holds, the query for each view, and known gaps.
+
 ## Rules
 
 - **Contracts are frozen.** `HarnessConfig` and `RunResult` in `packages/types` change only with team agreement.
