@@ -1,6 +1,10 @@
 import Link from "next/link";
 
 import { NavTabs } from "@/components/NavTabs";
+import { AccountWidget } from "@/components/AccountWidget";
+
+// Reads the session cookie via AccountWidget: must render per-request, not prerender statically.
+export const dynamic = "force-dynamic";
 
 // Held-out ablation from docs/report: same cheap model, four held-out specs,
 // memory writes off. Each spec is one segment, so a board is a 25-point step.
@@ -62,12 +66,15 @@ export default function Landing() {
           <span className="text-[15px] font-medium tracking-[0.08em] text-ink">Ripple</span>
           <NavTabs />
         </div>
-        <Link
-          href="/board"
-          className="hidden rounded-md bg-accent px-4 py-1.5 text-[13px] font-semibold text-[#06121f] hover:opacity-90 sm:inline-block"
-        >
-          Start a build →
-        </Link>
+        <div className="flex items-center gap-5">
+          <AccountWidget />
+          <Link
+            href="/board"
+            className="hidden rounded-md bg-accent px-4 py-1.5 text-[13px] font-semibold text-[#06121f] hover:opacity-90 sm:inline-block"
+          >
+            Start a build →
+          </Link>
+        </div>
       </header>
 
       <main className="flex-1">

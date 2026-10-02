@@ -67,6 +67,7 @@ export type SpecRequest = {
   heartbeat?: string;
   finished_at?: string;
   board_id?: string; // runs/boards for this request use this board_id
+  user_id?: string; // the signed-in web user who submitted it; the worker never reads or acts on this
   harness_version?: number;
   passed?: boolean;
   attempts?: number;
