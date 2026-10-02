@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { auth, authConfigured } from "@/lib/auth";
-import { signInAction, signOutAction } from "@/lib/auth-actions";
+import { signOutAction } from "@/lib/auth-actions";
 
 /** Sign-in link when signed out, or the account's name/email + sign-out when signed in. Server-rendered. */
 export async function AccountWidget() {
@@ -10,11 +11,9 @@ export async function AccountWidget() {
   const session = await auth();
   if (!session?.user) {
     return (
-      <form action={signInAction}>
-        <button type="submit" className="text-[12px] text-dim hover:text-accent">
-          Sign in
-        </button>
-      </form>
+      <Link href="/sign-in" className="text-[12px] text-dim hover:text-accent">
+        Sign in
+      </Link>
     );
   }
 
