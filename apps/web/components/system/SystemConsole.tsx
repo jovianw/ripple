@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { NavTabs } from "@/components/NavTabs";
 
@@ -55,7 +56,7 @@ function Section({
  * config evolution all live on /harness, which interprets them rather than
  * listing them.
  */
-export function SystemConsole() {
+export function SystemConsole({ accountSlot }: { accountSlot?: ReactNode } = {}) {
   const { data, paused, togglePause } = usePolling(loadSystem, POLL_MS);
 
   const health = data?.health ?? null;
@@ -92,6 +93,8 @@ export function SystemConsole() {
               {connected ? "Connected" : "Disconnected"}
             </span>
           </span>
+
+          {accountSlot}
         </div>
       </header>
 

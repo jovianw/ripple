@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { NavTabs } from "@/components/NavTabs";
 
@@ -70,7 +70,10 @@ async function loadAll(boardId: string | null): Promise<Snapshot> {
   };
 }
 
-export function HarnessDashboard({ sessionBoardId = null }: { sessionBoardId?: string | null } = {}) {
+export function HarnessDashboard({
+  sessionBoardId = null,
+  accountSlot,
+}: { sessionBoardId?: string | null; accountSlot?: ReactNode } = {}) {
   // Starts on the board this session actually submitted (from the URL), so opening /harness right after a build
   // shows that build's own activity — not whichever board happens to be most recently active system-wide, which
   // could easily be someone else's once more than one person is using this at once.
@@ -186,6 +189,8 @@ export function HarnessDashboard({ sessionBoardId = null }: { sessionBoardId?: s
               {connected ? "Connected" : "Disconnected"}
             </span>
           </span>
+
+          {accountSlot}
         </div>
       </header>
 

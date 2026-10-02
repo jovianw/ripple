@@ -16,6 +16,8 @@ export interface SpecRequestDoc {
   status: "queued" | "running" | "done" | "failed";
   created_at: string;
   source: "web";
+  /** The signed-in user who submitted this (Auth.js user id). Requests only; the worker never reads this field. */
+  user_id: string;
 }
 
 const globalForRequests = globalThis as unknown as { _rippleRequests?: MongoClient };
