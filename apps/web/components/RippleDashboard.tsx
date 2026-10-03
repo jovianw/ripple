@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { NavTabs } from "@/components/NavTabs";
 
@@ -98,7 +98,10 @@ function systemStatus(args: {
   return { label: "Idle", ink: "text-faint", dot: "bg-ghost", pulse: false };
 }
 
-export function RippleDashboard() {
+export function RippleDashboard({
+  accountSlot,
+  signedIn = true,
+}: { accountSlot?: ReactNode; signedIn?: boolean } = {}) {
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [revealed, setRevealed] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(-1);
@@ -178,6 +181,10 @@ export function RippleDashboard() {
   const [requestId, setRequestId] = useState<string | null>(null);
   const [requestNote, setRequestNote] = useState<string | null>(null);
   const build = useCallback((text: string = prompt) => {
+    if (!signedIn) {
+      setBuildError("sign in to build a board");
+      return;
+    }
     // Don't animate a board nobody asked for. The worker takes a few seconds;
     // until it answers, the view waits on the real request and says so. The
     // scripted walkthrough is the fallback for when there is no worker at all.
@@ -217,7 +224,7 @@ export function RippleDashboard() {
         setAwaiting(null);
         setBuildError("the server is unreachable");
       });
-  }, [prompt, clearTimers]);
+  }, [prompt, clearTimers, signedIn]);
 
   /**
    * The worker finished the specification that was submitted. Swap the
@@ -440,6 +447,8 @@ export function RippleDashboard() {
             />
             <span className={`text-[12px] ${status.ink}`}>{status.label}</span>
           </span>
+
+          {accountSlot}
         </div>
       </header>
 

@@ -16,6 +16,13 @@ export interface SpecRequestDoc {
   status: "queued" | "running" | "done" | "failed";
   created_at: string;
   source: "web";
+  /**
+   * The signed-in user who submitted this (Auth.js user id). Requests only; the worker never
+   * reads this field. Absent when the deployment has no auth configured at all (docs/demo.md's
+   * three-Mongo-vars setup) — submissions stay anonymous and un-owned in that case rather than
+   * being refused.
+   */
+  user_id?: string;
 }
 
 const globalForRequests = globalThis as unknown as { _rippleRequests?: MongoClient };
@@ -39,5 +46,8 @@ export function requestsCollection(): Collection<SpecRequestDoc> {
     .collection<SpecRequestDoc>("spec_requests");
 }
 
-/** More pending requests than this and new ones are refused: the worker runs one at a time on a model budget. */
+/** One signed-in user queued/running past this many requests gets refused: keeps one user from starving everyone else. */
 export const MAX_PENDING = 3;
+/** Total queued/running requests across every user past this many and new submissions are refused outright: the
+ * real backstop for one worker on a shared model budget. A small multiple of MAX_PENDING, not per-user × N users. */
+export const MAX_PENDING_GLOBAL = 15;
