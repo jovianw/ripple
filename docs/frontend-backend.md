@@ -161,9 +161,18 @@ change stream, runs it, and writes the status back. Design state is still writte
 `ripple.spec_requests` (it can't touch runs, boards, configs or lessons). Env var `MONGODB_URI_REQUESTS` (server-side only; set it in Vercel and `apps/web/.env.local`).
 Keep using `MONGODB_URI_READER` for every read except request status if you prefer one client per user.
 
+**Auth:** `POST /api/spec` requires a signed-in session (Auth.js, `apps/web/lib/auth.ts`) when auth is configured
+(`MONGODB_URI_AUTH` + at least one provider's env vars set) — unauthenticated requests get `401`. On a deployment
+with no auth vars set at all, the route falls back to accepting anonymous submits (no `user_id`), so the demo laptop
+setup in `docs/demo.md` keeps working without sign-in. When a session exists, its user id is stored as `user_id` on
+the inserted doc, and both a per-user and a global cap apply (`MAX_PENDING` / `MAX_PENDING_GLOBAL`, `apps/web/lib/requests.ts`).
+
 **Insert** (from a route handler, e.g. `POST /api/spec`):
 ```ts
-await requests.insertOne({ spec_id, status: "queued", created_at: new Date().toISOString() });
+await requests.insertOne({
+  spec_id, status: "queued", created_at: new Date().toISOString(), source: "web",
+  ...(session?.user?.id ? { user_id: session.user.id } : {}),
+});
 // spec_id: an _id from specs/specs.json (t01_… t08_, h01_… h04_) or "finale". Free text (`text`) is rejected until
 // Arjun's ad-hoc runBoard lands; offer a spec picker for now.
 ```

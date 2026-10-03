@@ -31,7 +31,7 @@ Per-person task list and timings: DESIGN.md §6.
 - **Contracts are frozen.** `HarnessConfig` and `RunResult` in `packages/types` change only with team agreement.
 - **Hidden checks stay hidden.** Nothing in `checks/` may reach Ripple's runtime agents: no imports into prompts, retrieval, Atlas, or MCP. That includes `checks/requirements.md` (what each spec is graded on) and `checks/reference/` (solution boards). Only Marcos edits `checks/`.
 - **Parts come from the whitelist.** The coder may only use parts in `parts/whitelist.json` (agent-visible). Add a part only if `npm run verify:parts` passes.
-- **One writer.** Only the worker writes to Atlas. The web app and MCP server use `MONGODB_URI_READER`.
+- **One writer.** Only the worker writes design state to Atlas. The web app and MCP server use `MONGODB_URI_READER`. Two narrow, documented exceptions, neither of which can touch design state: `MONGODB_URI_REQUESTS` (`spec_requester` user, `readWrite` on `ripple.spec_requests` only — the prompt box) and `MONGODB_URI_AUTH` (`ripple_auth` user, `readWrite` on `users`/`accounts`/`sessions`/`verification_tokens` only — the Auth.js adapter, `apps/web/lib/auth.ts`).
 - **No secrets in git.** Keys live in `.env` (gitignored). Never commit `.env`, `.mcp.json`, or API keys; share keys privately.
 - **Watch OpenRouter spend.** Each person uses their own OpenRouter key, and each key has a small budget (around $10). Use the cheap model (e.g. `google/gemini-3.8-flash`) for development, tests and the coder; strong models only for the planner, meta-agent and demo runs. Always set `max_tokens`. Log cost per call.
 - **Pin tscircuit.** `tscircuit@0.0.2646` (exact). Don't upgrade it.

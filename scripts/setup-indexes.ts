@@ -22,6 +22,14 @@ await col.requests.createIndex({ status: 1, created_at: 1 }); // the worker clai
 await col.requests.createIndex({ user_id: 1, created_at: -1 }); // a signed-in user's own request history
 console.log("regular indexes: ok");
 
+// Auth.js adapter collections (users/accounts/sessions/verification_tokens): not design state,
+// so not in `col`, but the adapter itself creates no indexes — without these, auth() scans
+// sessions on every request and expired sessions/magic-link tokens never get cleaned up.
+await db.collection("sessions").createIndex({ sessionToken: 1 }, { unique: true });
+await db.collection("sessions").createIndex({ expires: 1 }, { expireAfterSeconds: 0 });
+await db.collection("verification_tokens").createIndex({ expires: 1 }, { expireAfterSeconds: 0 });
+console.log("auth indexes: ok");
+
 const vectorIndexes = [
   { collection: col.subcircuits, name: "subcircuits_vec", filters: [] as string[] },
   { collection: col.lessons, name: "lessons_vec", filters: ["active"] },
